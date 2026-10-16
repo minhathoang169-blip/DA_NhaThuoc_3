@@ -1,25 +1,21 @@
-# Pharmacy backend
+# Backend — Quản lý nhà thuốc
 
-Backend Spring Boot cung cấp CRUD cho sản phẩm và lô thuốc, cùng tồn kho tổng hợp và hạn dùng gần nhất.
+Backend REST API dùng Spring Boot, Spring Data JPA và Spring Security. Các Controller hiện có: sản phẩm, lô thuốc, khách hàng, nhân viên và nhà cung cấp. Controller gọi Repository trực tiếp; chưa có Service layer riêng.
 
-## Yêu cầu
+## Môi trường và chạy local
 
-- JDK 22 (theo `pom.xml`); Maven Wrapper có sẵn.
-- SQL Server tùy chọn. Mặc định backend dùng H2 local.
-
-## Chạy local
+Yêu cầu JDK 22. Maven Wrapper có sẵn tại thư mục này; lần chạy đầu có thể cần Maven/dependency cache.
 
 ```powershell
+Set-Location .\pharmacy-backend
 .\mvnw.cmd spring-boot:run
 ```
 
-Backend chạy ở `http://localhost:8080`. Profile `local` dùng H2 trong bộ nhớ với ba mặt hàng mẫu; dữ liệu được tạo lại khi backend khởi động.
+Profile mặc định là `local`. H2 có trong dependency runtime; khi không có cấu hình datasource bên ngoài, Spring Boot có thể dùng H2. `LocalDataSeeder` chèn dữ liệu qua Repository nếu chưa có sản phẩm. Seeder không đọc `data.sql`.
 
 ## SQL Server
 
-`data.sql` tạo schema `QuanLyNhaThuocDB` gồm các bảng tiếng Việt và dữ liệu mẫu. Entity JPA ánh xạ vào `SanPham` và `LoThuoc`; schema không tự được tạo khi chạy profile SQL Server (`ddl-auto=none`).
-
-Bật TCP/IP cho SQL Server instance và cấu hình loopback port `1433`, sau đó restart dịch vụ. Profile dùng Windows Authentication của tài khoản chạy backend; Maven copy native DLL vào `target/native`.
+Cấu hình nằm trong `src/main/resources/application-sqlserver.properties`. Profile dùng Microsoft SQL Server JDBC Driver, Windows Integrated/Native Authentication và mặc định `localhost:1433` với database `QuanLyNhaThuocDB`. Biến `DB_HOST`, `DB_PORT`, `DB_NAME` có thể ghi đè các giá trị mặc định trong môi trường tiến trình.
 
 ```powershell
 $env:DB_HOST = 'localhost'
@@ -28,4 +24,36 @@ $env:DB_NAME = 'QuanLyNhaThuocDB'
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=sqlserver"
 ```
 
-Các API danh mục `/api/medicines`, `/api/batches`, `/api/customers`, `/api/employees`, `/api/suppliers` đều có `GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`. GET công khai; request ghi yêu cầu HTTP Basic Auth, mật khẩu development được in trong log Spring.
+Profile SQL Server đặt `spring.jpa.hibernate.ddl-auto=none` và `spring.sql.init.mode=never`; ứng dụng không tự tạo schema hoặc chạy `data.sql`. Entity ánh xạ một số bảng tiếng Việt như `SanPham`, `LoThuoc`, `KhachHang`, `NhanVien`, `NhaCungCap`.
+
+`src/main/resources/data.sql` tạo database, bảng, khóa/index, computed columns, trigger tồn kho và dữ liệu mẫu. Đây là script khởi tạo không idempotent; không chạy lại trên database đã có dữ liệu nếu chưa đánh giá tác động và có phê duyệt.
+
+## Phạm vi HTTP Basic
+
+Theo `config/SecurityConfig.java`:
+
+- Công khai: `GET /api/medicines` và `GET /api/medicines/{id}`.
+- Cần HTTP Basic: các endpoint `/api/**` khác, gồm GET lô thuốc/khách hàng/nhân viên/nhà cung cấp và các POST/PUT/DELETE.
+- Bị từ chối: route không khớp `/api/**`.
+
+Không thấy `UserDetailsService`, `PasswordEncoder`, kho tài khoản riêng hay rule kiểm tra theo vai trò trong mã hiện tại. Spring Boot dùng tài khoản phát triển mặc định và sinh mật khẩu ngẫu nhiên trong log khởi động. Đây không phải cơ chế quản lý tài khoản production; không chia sẻ log chứa thông tin xác thực.
+
+Frontend gửi Basic Auth khi mở màn hình danh mục; Postman collection cũng khai báo Basic Auth cấp collection. Màn hình tổng quan chỉ cần endpoint thuốc công khai.
+
+## Kiểm thử
+
+Test trong `src/test/java/.../PharmacyBackendApplicationTests.java` gồm tải Spring context, CRUD danh mục và hai kiểm tra yêu cầu HTTP 401 khi request không xác thực. Chưa có test chuyên biệt cho SQL Server thật, trigger tồn kho, nhập hàng/bán hàng hoặc phân quyền theo vai trò.
+
+Sau khi xác nhận Maven Wrapper và dependency đã có cache, có thể chạy kiểm thử offline bằng:
+
+```powershell
+.\mvnw.cmd -o test
+```
+
+Chế độ `-o` ngăn Maven truy cập mạng; nếu thiếu artifact trong cache, lệnh sẽ thất bại thay vì tải xuống. Test mặc định không xác minh database SQL Server thật.
+
+## API danh mục
+
+Các nhóm `/api/medicines`, `/api/batches`, `/api/customers`, `/api/employees`, `/api/suppliers` có GET danh sách, GET theo ID, POST, PUT theo ID và DELETE theo ID. Kiểm tra request/response cụ thể trong các Controller/DTO tương ứng và Postman collection ở thư mục `postman/`.
+
+`SecurityConfig` tắt CSRF và bật HTTP Basic. Không triển khai môi trường production trước khi có thiết kế xác thực, quản lý tài khoản, phân quyền và cấu hình bảo mật phù hợp.

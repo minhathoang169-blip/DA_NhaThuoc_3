@@ -1,17 +1,26 @@
 # Quản lý nhà thuốc
 
-Dự án gồm backend Spring Boot, dashboard React/Vite và ứng dụng Flutter. Backend cung cấp CRUD cho sản phẩm, lô thuốc, khách hàng, nhân viên và nhà cung cấp.
+Dự án gồm Backend REST API bằng Spring Boot, dashboard web React/Vite, collection Postman và một ứng dụng Flutter mẫu. Backend hiện cung cấp CRUD danh mục cho sản phẩm, lô thuốc, khách hàng, nhân viên và nhà cung cấp.
+
+## Cấu trúc
+
+- `pharmacy-backend/`: Spring Boot, JPA, cấu hình H2/SQL Server, test và script SQL Server.
+- `web-pharmacy/`: ứng dụng React/Vite.
+- `pharmacy-backend/mobile_pharmacy/`: skeleton Flutter, hiện chưa tích hợp API nghiệp vụ.
+- `postman/Quan-ly-nha-thuoc.postman_collection.json`: request kiểm tra CRUD API.
+
+Backend hiện để Controller gọi Repository trực tiếp; chưa có Service layer riêng. Các API hóa đơn, nhập hàng và đơn hàng online chưa được triển khai đầy đủ xuyên suốt backend và frontend.
 
 ## Yêu cầu
 
-- JDK 22 (được khai báo trong `pharmacy-backend/pom.xml`); Maven Wrapper đã có sẵn.
-- Node.js 22.12+ và npm để chạy frontend Vite 8.
-- Flutter SDK tương thích với Dart `^3.13.4` nếu chạy ứng dụng di động.
-- SQL Server chỉ cần khi chạy với database thật; chế độ local mặc định dùng H2.
+- JDK 22; Maven Wrapper nằm trong `pharmacy-backend/`.
+- Node.js và npm phù hợp với Vite 8.
+- SQL Server chỉ cần khi chạy profile `sqlserver`.
+- Flutter SDK chỉ cần nếu phát triển ứng dụng mobile.
 
-## Chạy local
+## Chạy Backend local
 
-Từ thư mục dự án:
+Từ thư mục gốc dự án, mở PowerShell:
 
 ```powershell
 Push-Location .\pharmacy-backend
@@ -19,35 +28,13 @@ Push-Location .\pharmacy-backend
 Pop-Location
 ```
 
-Backend chạy ở `http://localhost:8080`. Profile `local` dùng H2 trong bộ nhớ với ba mặt hàng mẫu; dữ liệu được tạo lại khi backend khởi động.
+Profile mặc định là `local`. H2 được dùng khi có trên classpath và không có datasource bên ngoài ghi đè cấu hình. `LocalDataSeeder` thêm dữ liệu mẫu qua Repository khi chưa có sản phẩm; không đọc `data.sql`.
 
-Các màn hình danh mục có đăng nhập Basic Auth trước khi thêm/sửa/xóa. Tài khoản mặc định là `user`; mật khẩu phát triển ngẫu nhiên được in trong terminal backend mỗi lần khởi động và không được lưu trong giao diện.
+Backend lắng nghe tại `http://localhost:8080`.
 
-Mở terminal thứ hai:
+### Chạy với SQL Server
 
-```powershell
-Push-Location .\web-pharmacy
-npm ci
-npm run dev
-Pop-Location
-```
-
-Dashboard chạy ở `http://localhost:5173` và proxy `/api` tới backend. API đọc kho: `GET http://localhost:8080/api/medicines`.
-
-## Ứng dụng di động
-
-Ứng dụng Flutter nằm tại `pharmacy-backend/mobile_pharmacy`. Hiện đây vẫn là skeleton Flutter mặc định, chưa gọi API nghiệp vụ.
-
-```powershell
-Push-Location .\pharmacy-backend\mobile_pharmacy
-flutter pub get
-flutter run
-Pop-Location
-```
-
-## Kết nối SQL Server
-
-Schema `QuanLyNhaThuocDB` được tạo từ `pharmacy-backend/src/main/resources/data.sql` và backend ánh xạ trực tiếp vào `SanPham`/`LoThuoc`. Profile SQL Server dùng Windows Authentication của tài khoản đang chạy backend. Instance `SQLEXPRESS01` cần bật TCP/IP trên loopback và lắng nghe cổng `1433`; bật TCP/IP cần restart dịch vụ SQL Server. Native auth DLL được Maven copy vào `pharmacy-backend/target/native`.
+Profile SQL Server dùng Windows Integrated Authentication và mặc định trỏ `localhost:1433`, database `QuanLyNhaThuocDB`. Cần database/schema đã được tạo trước; profile đặt `spring.jpa.hibernate.ddl-auto=none` và ứng dụng không tự chạy SQL init.
 
 ```powershell
 $env:DB_HOST = 'localhost'
@@ -58,15 +45,36 @@ Push-Location .\pharmacy-backend
 Pop-Location
 ```
 
-CRUD danh mục: `/api/medicines`, `/api/batches`, `/api/customers`, `/api/employees`, `/api/suppliers`, mỗi nhóm có `GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`. GET công khai; thao tác ghi yêu cầu HTTP Basic Auth. Mật khẩu phát triển được Spring in trong log backend; không dùng cơ chế này thay cho tài khoản quản trị production.
+`data.sql` là script tạo database, bảng, ràng buộc, trigger và dữ liệu mẫu. Script có lệnh `CREATE DATABASE`/`CREATE TABLE`, không phải migration chạy lặp an toàn; chỉ chạy riêng khi đã kiểm tra database đích và được phép thay đổi dữ liệu.
+
+## Xác thực API
+
+Spring Security dùng HTTP Basic. `GET /api/medicines` và `GET /api/medicines/{id}` được công khai. Các endpoint `/api/**` khác, bao gồm GET danh mục khác và mọi POST/PUT/DELETE, yêu cầu xác thực. Route ngoài `/api/**` bị từ chối.
+
+Không thấy cấu hình phân quyền theo vai trò trong mã hiện tại. Spring Boot cung cấp tài khoản phát triển mặc định; mật khẩu ngẫu nhiên được in trong log khi khởi động. Không dùng cấu hình tài khoản phát triển cho production.
+
+## Chạy Frontend
+
+Mở terminal thứ hai từ thư mục gốc:
+
+```powershell
+Push-Location .\web-pharmacy
+npm ci
+npm run dev
+Pop-Location
+```
+
+Vite dev server thường dùng `http://localhost:5173` và proxy `/api` tới Backend ở `http://localhost:8080`. Proxy này chỉ áp dụng cho dev server; môi trường triển khai cần cấu hình API/proxy riêng.
+
+Các script khác trong `web-pharmacy/package.json`: `npm run build`, `npm run lint`, `npm run preview`.
 
 ## Postman
 
-Import `postman/Quan-ly-nha-thuoc.postman_collection.json`. Đặt `apiPassword` trong collection variables thành mật khẩu đang được in trong terminal backend, sau đó chạy collection; các request tạo record tự lưu mã để GET/PUT/DELETE tiếp theo dùng lại. Collection đã được chạy bằng Newman: 25 request, 25 assertion, không lỗi.
+Import `postman/Quan-ly-nha-thuoc.postman_collection.json`. Collection dùng HTTP Basic Auth thông qua biến collection; cấu hình giá trị xác thực cục bộ từ thông tin Backend in khi khởi động. Không đưa thông tin xác thực vào Git hoặc chia sẻ log chưa được rà soát.
 
-SQL Server phải được khởi động với TCP/IP bật; hiện môi trường kiểm tra chưa bật TCP, nên ứng dụng Java chưa thể kết nối tới database dù schema đã được tạo. Tài khoản Windows chạy backend cũng cần quyền đọc/ghi trên `QuanLyNhaThuocDB`.
+## Giới hạn đã biết
 
-## Thư mục
-
-- `pharmacy-backend/`: API Spring Boot, JPA và cấu hình database.
-- `web-pharmacy/`: dashboard React/Vite.
+- Test bảo mật kỳ vọng request không xác thực bị HTTP 401; cần chạy test để xác minh trạng thái hiện tại.
+- SQL Server service, TCP/IP, database và dữ liệu thực tế chưa được xác minh chỉ từ mã nguồn.
+- Ứng dụng Flutter hiện là skeleton, chưa gọi API nghiệp vụ.
+- API chỉ có bằng chứng CRUD cho năm nhóm danh mục; chưa có luồng bán hàng/nhập hàng hoàn chỉnh.
