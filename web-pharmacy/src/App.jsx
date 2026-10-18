@@ -22,6 +22,26 @@ function localDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+const iconPaths = {
+  overview: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+  medicines: <><path d="m8 4 12 12a4.2 4.2 0 0 1-6 6L2 10a4.2 4.2 0 0 1 6-6Z" /><path d="m7 13 6-6" /><path d="m5 8 3-3" /></>,
+  batches: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="M3 8v9l9 5 9-5V8" /><path d="M12 13v9" /></>,
+  customers: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  employees: <><rect x="3" y="4" width="18" height="17" rx="2" /><circle cx="9" cy="10" r="2.5" /><path d="M5.5 17a3.5 3.5 0 0 1 7 0M15 9h3M15 13h3M15 17h3" /></>,
+  suppliers: <><path d="M3 6h11v12H3zM14 10h4l3 3v5h-7z" /><circle cx="7.5" cy="18" r="2" /><circle cx="17.5" cy="18" r="2" /></>,
+  imports: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></>,
+  sales: <><path d="M5 8h14l-1 13H6L5 8Z" /><path d="M9 9V6a3 3 0 0 1 6 0v3" /><path d="M9 13h6" /></>,
+  refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M5.5 9a7 7 0 0 1 11.6-2L20 12M4 12l2.9 5a7 7 0 0 0 11.6-2" /></>,
+  arrow: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
+  alert: <><path d="m10.3 3.9-8 13.8A2 2 0 0 0 4 20.7h16a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>,
+  inventory: <><path d="M4 7h16l-1 14H5L4 7Z" /><path d="M8 7V5a4 4 0 0 1 8 0v2M9 12h6" /></>,
+  currency: <><path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" /></>,
+}
+
+function Icon({ name, size = 18 }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{iconPaths[name]}</svg>
+}
+
 function App() {
   const [medicines, setMedicines] = useState([])
   const [search, setSearch] = useState('')
@@ -99,28 +119,28 @@ function App() {
   }
 
   const navigation = [
-    { key: 'overview', label: 'Tổng quan', index: '01' },
-    { key: 'medicines', label: 'Sản phẩm', index: '02' },
-    { key: 'batches', label: 'Lô thuốc', index: '03' },
-    { key: 'customers', label: 'Khách hàng', index: '04' },
-    { key: 'employees', label: 'Nhân viên', index: '05' },
-    { key: 'suppliers', label: 'Nhà cung cấp', index: '06' },
-    { key: 'imports', label: 'Nhập hàng', index: '07' },
-    { key: 'sales', label: 'Bán hàng', index: '08' },
+    { key: 'overview', label: 'Tổng quan', icon: 'overview' },
+    { key: 'medicines', label: 'Sản phẩm', icon: 'medicines' },
+    { key: 'batches', label: 'Lô thuốc', icon: 'batches' },
+    { key: 'customers', label: 'Khách hàng', icon: 'customers' },
+    { key: 'employees', label: 'Nhân viên', icon: 'employees' },
+    { key: 'suppliers', label: 'Nhà cung cấp', icon: 'suppliers' },
+    { key: 'imports', label: 'Nhập hàng', icon: 'imports' },
+    { key: 'sales', label: 'Bán hàng', icon: 'sales' },
   ]
 
   return (
     <div className="app-shell" id="top">
       <aside className="sidebar">
         <a className="brand" href="#top" aria-label="Nhà thuốc An Tâm, tổng quan">
-          <span className="brand-mark">+</span>
-          <span>An Tâm<small>NHÀ THUỐC</small></span>
+          <span className="brand-mark"><Icon name="medicines" size={22} /></span>
+          <span>An Tâm<small>CHĂM SÓC SỨC KHỎE</small></span>
         </a>
         <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
         <nav className="main-nav" aria-label="Điều hướng chính">
-          {navigation.map(({ key, label, index }) => (
+          {navigation.map(({ key, label, icon }) => (
             <button className={`nav-link ${activeView === key ? 'active' : ''}`} key={key} type="button" onClick={() => selectView(key)}>
-              <span>{index}</span>{label}
+              <span className="nav-icon"><Icon name={icon} size={17} /></span>{label}
             </button>
           ))}
         </nav>
@@ -132,7 +152,7 @@ function App() {
 
       <main className="workspace">
         <header className="topbar">
-          <div className="breadcrumb">NHÀ THUỐC <span>/</span> {navigation.find(({ key }) => key === activeView)?.label.toLocaleUpperCase('vi')}</div>
+          <div className="breadcrumb"><span className="breadcrumb-brand">AN TÂM</span><span className="breadcrumb-divider">/</span> {navigation.find(({ key }) => key === activeView)?.label}</div>
           <div className="topbar-tools">
             <div className={`connection ${connection}`}>
               <span className="connection-dot" />
@@ -164,42 +184,46 @@ function App() {
         {activeView === 'overview' && <section className="page-content" id="overview">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">ĐIỀU HÀNH NHÀ THUỐC</p>
-              <h1>Tổng quan kho thuốc</h1>
-              <p className="heading-note">Theo dõi lượng hàng, giá trị tồn và các lô cần lưu ý.</p>
+              <p className="eyebrow">THỨC HAI · NHÀ THUỐC AN TÂM</p>
+              <h1>Chào buổi sáng 👋</h1>
+              <p className="heading-note">Đây là tình hình kho và hoạt động của nhà thuốc hôm nay.</p>
             </div>
-            <button className="refresh-button" type="button" onClick={() => { setConnection('loading'); loadMedicines() }} disabled={connection === 'loading'}>
-              <span aria-hidden="true">↻</span> Làm mới dữ liệu
-            </button>
+            <div className="heading-actions">
+              <button className="refresh-button" type="button" onClick={() => { setConnection('loading'); loadMedicines() }} disabled={connection === 'loading'}>
+                <Icon name="refresh" size={16} /> Làm mới
+              </button>
+              <button className="primary-action" type="button" onClick={() => selectView('imports')}><Icon name="imports" size={16} /> Lập phiếu nhập</button>
+              <button className="secondary-action" type="button" onClick={() => selectView('sales')}><Icon name="sales" size={16} /> Bán hàng</button>
+            </div>
           </div>
 
           {connection === 'error' && (
             <div className="error-banner" role="alert">
               <strong>Chưa lấy được dữ liệu từ máy chủ.</strong>
-              <span>Kiểm tra backend tại cổng 8080 rồi thử làm mới.</span>
+              <span>Kiểm tra kết nối máy chủ rồi thử làm mới.</span>
             </div>
           )}
 
           <section className="metrics" aria-label="Chỉ số kho">
             <article className="metric metric-primary">
-              <span className="metric-label">MẶT HÀNG</span>
+              <div className="metric-topline"><span className="metric-label">MẶT HÀNG</span><span className="metric-icon"><Icon name="medicines" /></span></div>
               <strong>{connection === 'loading' ? '—' : medicines.length}</strong>
-              <span className="metric-foot">Sản phẩm đang quản lý</span><span className="metric-index">01</span>
+              <span className="metric-foot">Sản phẩm đang quản lý</span>
             </article>
             <article className="metric">
-              <span className="metric-label">TỔNG TỒN KHO</span>
+              <div className="metric-topline"><span className="metric-label">TỔNG TỒN KHO</span><span className="metric-icon"><Icon name="inventory" /></span></div>
               <strong>{connection === 'loading' ? '—' : medicines.reduce((sum, item) => sum + item.stock, 0).toLocaleString('vi-VN')}</strong>
-              <span className="metric-foot">Đơn vị sản phẩm</span><span className="metric-index">02</span>
+              <span className="metric-foot">Đơn vị sản phẩm</span>
             </article>
             <article className="metric">
-              <span className="metric-label">GIÁ TRỊ TỒN</span>
+              <div className="metric-topline"><span className="metric-label">GIÁ TRỊ TỒN</span><span className="metric-icon"><Icon name="currency" /></span></div>
               <strong className="metric-currency">{connection === 'loading' ? '—' : currency.format(inventoryValue)}</strong>
-              <span className="metric-foot">Ước tính theo giá bán</span><span className="metric-index">03</span>
+              <span className="metric-foot">Ước tính theo giá bán</span>
             </article>
             <article className="metric metric-alert">
-              <span className="metric-label">CẦN THEO DÕI</span>
+              <div className="metric-topline"><span className="metric-label">CẦN THEO DÕI</span><span className="metric-icon"><Icon name="alert" /></span></div>
               <strong>{connection === 'loading' ? '—' : attentionCount}</strong>
-              <span className="metric-foot">Tồn thấp, sắp hết hoặc đã hết hạn</span><span className="metric-index">04</span>
+              <span className="metric-foot">Tồn thấp, sắp hết hoặc đã hết hạn</span>
             </article>
           </section>
 
