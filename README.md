@@ -1,6 +1,6 @@
 # Quản lý nhà thuốc
 
-Dự án gồm Backend REST API bằng Spring Boot, dashboard web React/Vite, collection Postman và một ứng dụng Flutter mẫu. Backend hiện cung cấp CRUD danh mục cho sản phẩm, lô thuốc, khách hàng, nhân viên và nhà cung cấp.
+Dự án gồm Backend REST API bằng Spring Boot, dashboard web React/Vite, collection Postman và một ứng dụng Flutter mẫu. Backend và dashboard dùng chung các API cho danh mục sản phẩm, lô thuốc, khách hàng, nhân viên, nhà cung cấp, nhập hàng và bán hàng.
 
 ## Cấu trúc
 
@@ -9,7 +9,7 @@ Dự án gồm Backend REST API bằng Spring Boot, dashboard web React/Vite, co
 - `pharmacy-backend/mobile_pharmacy/`: skeleton Flutter, hiện chưa tích hợp API nghiệp vụ.
 - `postman/Quan-ly-nha-thuoc.postman_collection.json`: request kiểm tra CRUD API.
 
-Backend hiện để Controller gọi Repository trực tiếp; chưa có Service layer riêng. Các API hóa đơn, nhập hàng và đơn hàng online chưa được triển khai đầy đủ xuyên suốt backend và frontend.
+Các Controller danh mục giữ CRUD đơn giản; nghiệp vụ nhập/bán dùng Service transaction riêng để ghi lịch sử theo lô và cập nhật tồn cùng lúc. Giao dịch đã ghi nhận là lịch sử, không sửa/xóa để tránh làm sai tồn kho; lô đã có lịch sử cũng không cho sửa thông tin định danh/hạn dùng. Đơn hàng online và thanh toán chưa nằm trong phạm vi dashboard quản trị này.
 
 ## Yêu cầu
 

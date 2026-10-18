@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import CrudModule from './CrudModule.jsx'
+import TransactionModule from './TransactionModule.jsx'
 import { verifyCredentials } from './apiAuth.js'
 import './App.css'
 import './dashboard.css'
@@ -16,6 +17,10 @@ const dateFormat = new Intl.DateTimeFormat('vi-VN', {
   month: '2-digit',
   year: 'numeric',
 })
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 function App() {
   const [medicines, setMedicines] = useState([])
@@ -54,12 +59,17 @@ function App() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const refresh = () => loadMedicines()
+    window.addEventListener('pharmacy-data-changed', refresh)
+    return () => window.removeEventListener('pharmacy-data-changed', refresh)
+  }, [])
+
   const lowStock = medicines.filter((medicine) => medicine.stock < 20)
-  const expiringSoon = medicines.filter((medicine) => {
-    if (!medicine.nearestExpiry) return false
-    const daysLeft = (new Date(medicine.nearestExpiry) - new Date()) / 86400000
-    return daysLeft >= 0 && daysLeft <= 90
-  })
+  const todayKey = lastUpdated ? localDateKey(lastUpdated) : null
+  const expiringSoon = medicines.filter((medicine) => medicine.nearestExpiry && todayKey
+    && (Date.parse(`${medicine.nearestExpiry}T00:00:00`) - Date.parse(`${todayKey}T00:00:00`)) / 86400000 <= 90)
+  const attentionCount = new Set([...lowStock, ...expiringSoon].map((medicine) => medicine.id)).size
   const inventoryValue = medicines.reduce((total, medicine) => total + medicine.price * medicine.stock, 0)
   const normalizedSearch = search.trim().toLocaleLowerCase('vi')
   const visibleMedicines = medicines.filter((medicine) => {
@@ -95,14 +105,16 @@ function App() {
     { key: 'customers', label: 'Khách hàng', index: '04' },
     { key: 'employees', label: 'Nhân viên', index: '05' },
     { key: 'suppliers', label: 'Nhà cung cấp', index: '06' },
+    { key: 'imports', label: 'Nhập hàng', index: '07' },
+    { key: 'sales', label: 'Bán hàng', index: '08' },
   ]
 
   return (
     <div className="app-shell" id="top">
       <aside className="sidebar">
-        <a className="brand" href="#top" aria-label="Dược An, tổng quan">
+        <a className="brand" href="#top" aria-label="Nhà thuốc An Tâm, tổng quan">
           <span className="brand-mark">+</span>
-          <span>Dược An<small>QUẢN LÝ NHÀ THUỐC</small></span>
+          <span>An Tâm<small>NHÀ THUỐC</small></span>
         </a>
         <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
         <nav className="main-nav" aria-label="Điều hướng chính">
@@ -130,7 +142,8 @@ function App() {
           </div>
         </header>
 
-        {activeView !== 'overview' && auth && <CrudModule moduleKey={activeView} auth={auth} />}
+        {activeView !== 'overview' && auth && ['imports', 'sales'].includes(activeView) && <TransactionModule key={activeView} kind={activeView} auth={auth} />}
+        {activeView !== 'overview' && auth && !['imports', 'sales'].includes(activeView) && <CrudModule moduleKey={activeView} auth={auth} />}
 
         {activeView !== 'overview' && !auth && (
           <section className="page-content auth-page">
@@ -185,8 +198,8 @@ function App() {
             </article>
             <article className="metric metric-alert">
               <span className="metric-label">CẦN THEO DÕI</span>
-              <strong>{connection === 'loading' ? '—' : lowStock.length + expiringSoon.length}</strong>
-              <span className="metric-foot">Sắp hết hoặc gần hạn dùng</span><span className="metric-index">04</span>
+              <strong>{connection === 'loading' ? '—' : attentionCount}</strong>
+              <span className="metric-foot">Tồn thấp, sắp hết hoặc đã hết hạn</span><span className="metric-index">04</span>
             </article>
           </section>
 
@@ -211,7 +224,11 @@ function App() {
                   {connection !== 'loading' && visibleMedicines.map((medicine) => {
                     const stockState = medicine.stock < 10 ? 'critical' : medicine.stock < 20 ? 'low' : 'available'
                     const expiryDate = medicine.nearestExpiry ? new Date(medicine.nearestExpiry) : null
-                    const isExpiring = expiryDate && (expiryDate - new Date()) / 86400000 <= 90
+                    const daysToExpiry = expiryDate && todayKey
+                      ? (Date.parse(`${medicine.nearestExpiry}T00:00:00`) - Date.parse(`${todayKey}T00:00:00`)) / 86400000
+                      : Infinity
+                    const isExpiring = daysToExpiry <= 90
+                    const isExpired = Boolean(medicine.nearestExpiry && todayKey && medicine.nearestExpiry < todayKey)
                     return (
                       <tr key={medicine.id}>
                         <td><div className="medicine-name"><span className="medicine-symbol">{medicine.name.slice(0, 1)}</span><span><strong>{medicine.name}</strong><small>Mã {medicine.id}</small></span></div></td>
@@ -219,7 +236,7 @@ function App() {
                         <td className="price-cell">{currency.format(medicine.price)}</td>
                         <td><strong className="stock-number">{medicine.stock.toLocaleString('vi-VN')}</strong><span className="stock-unit"> đv</span></td>
                         <td className={isExpiring ? 'expiry-cell expiring' : 'expiry-cell'}>{expiryDate ? dateFormat.format(expiryDate) : 'Chưa có lô'}</td>
-                        <td><span className={`status-pill ${stockState}`}><span />{stockState === 'critical' ? 'Rất thấp' : stockState === 'low' ? 'Sắp hết' : 'Ổn định'}</span></td>
+                        <td><span className={`status-pill ${isExpired ? 'critical' : stockState}`}><span />{isExpired ? 'Có lô hết hạn' : stockState === 'critical' ? 'Rất thấp' : stockState === 'low' ? 'Sắp hết' : 'Ổn định'}</span></td>
                       </tr>
                     )
                   })}
@@ -230,7 +247,7 @@ function App() {
             </div>
             <footer className="table-footer"><span>Hiển thị {visibleMedicines.length} / {medicines.length} mặt hàng</span><span>Dữ liệu tồn kho từ các lô thuốc</span></footer>
           </section>
-          <footer className="page-footer"><span>DƯỢC AN <i>•</i> QUẢN LÝ NHÀ THUỐC</span><span>Hạn dùng tính từ lô gần nhất</span></footer>
+          <footer className="page-footer"><span>AN TÂM <i>•</i> QUẢN LÝ NHÀ THUỐC</span><span>Hạn dùng tính từ lô gần nhất</span></footer>
         </section>}
       </main>
     </div>

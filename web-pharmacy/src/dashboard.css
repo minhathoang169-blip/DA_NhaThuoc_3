@@ -123,6 +123,7 @@ tr:hover td { background: #fbfcfa; }
 .form-field > span { color: #506055; font-size: 10px; font-weight: 600; }
 .form-field b { color: #b94c3f; }
 .form-field input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #dce4d9; border-radius: 3px; outline: 0; color: #33483b; background: #fff; font-size: 11px; }
+.form-field select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #dce4d9; border-radius: 3px; outline: 0; color: #33483b; background: #fff; font-size: 11px; }
 .form-field input:focus { border-color: #789474; box-shadow: 0 0 0 2px rgb(120 148 116 / 14%); }
 .form-field input:disabled { color: #879188; background: #f3f5f1; }
 .form-error { grid-column: 1 / -1; padding: 9px 10px; color: #9f4b40; background: #fff0ed; font-size: 10px; }
@@ -139,6 +140,19 @@ tr:hover td { background: #fbfcfa; }
 .save-button { border-color: #285443; color: #f5f8ee; background: #285443; }
 .save-button:hover { background: #1e4335; }
 .save-button:disabled { cursor: wait; opacity: .65; }
+.transaction-form { margin-bottom: 30px; padding: 18px; border: 1px solid #e2e8df; border-radius: 5px; background: #fff; }
+.transaction-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.transaction-lines-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; padding-bottom: 10px; border-bottom: 1px solid #e7ebe4; }
+.transaction-lines-heading h2 { font-size: 14px; }
+.transaction-lines { display: grid; gap: 10px; padding-top: 12px; }
+.transaction-line { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(100px, .7fr) minmax(140px, 1fr) auto; align-items: end; gap: 10px; padding: 10px; border: 1px solid #edf0eb; background: #fbfcfa; }
+.transaction-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; padding-top: 13px; border-top: 1px solid #e7ebe4; color: #718076; font-size: 11px; }
+.transaction-form-footer strong { margin-left: 7px; color: #2a4738; font-size: 14px; }
+.transaction-id { padding: 0; border: 0; color: #315f48; background: transparent; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.transaction-detail-cell { height: auto; padding: 12px 18px; background: #f8faf6 !important; }
+.transaction-detail-list { display: grid; gap: 8px; white-space: normal; }
+.transaction-detail-list > div { display: grid; grid-template-columns: 1fr auto auto; gap: 20px; color: #617065; font-size: 10px; }
+.transaction-detail-list strong { color: #30483a; text-align: right; }
 
 @media (min-width: 1500px) { .page-content { padding-top: 55px; } }
 @media (max-width: 1100px) {
@@ -184,8 +198,94 @@ tr:hover td { background: #fbfcfa; }
   .resource-toolbar .search-box { width: 100%; }
   .resource-toolbar .refresh-button { align-self: flex-end; }
   .record-form { grid-template-columns: 1fr; }
+  .transaction-form { padding: 13px; }
+  .transaction-fields { grid-template-columns: 1fr; }
+  .transaction-line { grid-template-columns: 1fr 1fr; }
+  .transaction-line .form-field:first-child { grid-column: 1 / -1; }
+  .transaction-form-footer { align-items: flex-end; flex-direction: column; }
   .auth-page { min-height: calc(100vh - 110px); padding-top: 50px; }
   .auth-panel { padding: 19px; }
   .modal-backdrop { align-items: end; padding: 0; }
   .modal-dialog { max-height: 90vh; padding: 18px 17px 20px; border-radius: 8px 8px 0 0; }
+}
+
+/* Contrast pass: keep the same pharmacy palette while making supporting text easier to read. */
+.sidebar { color: #f8fbf8; }
+.brand small { color: #cfddd3; font-size: 9px; }
+.nav-caption { color: #c0d3c9; font-size: 10px; }
+.nav-link { color: #d8e4dc; font-size: 13px; }
+.nav-link span { color: #a9c0b1; font-size: 10px; }
+.nav-link.active { color: #fff; background: #2d604b; }
+.sidebar-bottom small { color: #c0d3c9; font-size: 10px; }
+.sidebar-bottom strong { color: #fff; font-size: 12px; }
+.breadcrumb { color: #53645a; font-size: 10px; }
+.breadcrumb span { color: #718176; }
+.connection { color: #245c3b; font-size: 11px; }
+.connection.error { color: #a42f27; }
+.connection.loading { color: #725a13; }
+.logout-button { color: #526258; font-size: 11px; }
+.eyebrow { color: #4a6251; font-size: 10px; }
+.page-content h1, .page-content h2 { color: #182c21; }
+.heading-note { color: #506055; font-size: 12px; }
+.refresh-button { border-color: #b8c7b9; color: #294a37; font-size: 11px; }
+.refresh-button:hover { border-color: #426d4b; background: #f2f7ed; }
+.metric { border-color: #cbd6c9; }
+.metric-label { color: #56675b; font-size: 9px; }
+.metric-primary .metric-label, .metric-primary .metric-foot { color: #d7e5db; }
+.metric-foot { color: #56675b; font-size: 10px; }
+.updated-at { color: #536359; font-size: 10px; }
+.filter-tabs button { color: #4c5e52; font-size: 11px; }
+.filter-tabs button.selected { color: #173b27; background: #dce9d2; }
+.filter-tabs button span { color: #405448; font-size: 10px; }
+.search-box { border-color: #bdcabc; color: #43574a; }
+.search-box input { color: #24392c; font-size: 11px; }
+.search-box input::placeholder { color: #5c6d61; opacity: 1; }
+th { color: #4e5f53; font-size: 9px; }
+td { color: #3e5044; font-size: 11px; }
+.medicine-symbol { color: #315b3b; background: #e4edd9; }
+.medicine-name strong { color: #253b2d; font-size: 11px; }
+.medicine-name small { color: #596b5e; font-size: 9px; }
+.ingredient-cell, .expiry-cell { color: #4d5e52; }
+.price-cell, .stock-number { color: #294536; }
+.stock-unit { color: #53645a; font-size: 9px; }
+.expiry-cell.expiring { color: #914411; }
+.status-pill { color: #285b31; background: #e4f0df; font-size: 9px; }
+.status-pill.low { color: #784600; background: #fff0cf; }
+.status-pill.critical { color: #922c24; background: #ffe5df; }
+.table-message { color: #506055; }
+.table-footer { color: #536359; font-size: 10px; }
+.page-footer { color: #536359; font-size: 9px; }
+.icon-action { border-color: #bdcabc; color: #294d37; font-size: 10px; }
+.icon-action.danger { color: #922f27; }
+.form-field > span { color: #354b3d; font-size: 11px; }
+.form-field input, .form-field select { border-color: #b9c8b8; color: #23372a; font-size: 12px; }
+.form-field input:disabled { color: #4f5f54; }
+.form-error { color: #8c2b22; font-size: 11px; }
+.modal-close { color: #344b3d; }
+.cancel-button { border-color: #bdcabc; color: #3f5246; }
+.save-button { border-color: #1d4933; background: #1d4933; }
+.transaction-form-footer { color: #4e5f53; }
+.transaction-detail-list > div { color: #405247; }
+.transaction-detail-list strong { color: #20392b; }
+.transaction-id { color: #1d5635; }
+.error-banner { color: #762d26; background: #ffebe6; }
+.form-field input:focus, .form-field select:focus, .search-box:focus-within {
+  border-color: #245d39;
+  box-shadow: 0 0 0 3px rgb(36 93 57 / 18%);
+}
+.nav-link:focus-visible, .refresh-button:focus-visible, .icon-action:focus-visible,
+.filter-tabs button:focus-visible, .logout-button:focus-visible, .save-button:focus-visible,
+.cancel-button:focus-visible, .modal-close:focus-visible, .transaction-id:focus-visible {
+  outline: 3px solid #b7d957;
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .breadcrumb { font-size: 9px; }
+  .connection, .logout-button { font-size: 10px; }
+  .heading-note { font-size: 11px; }
+  .updated-at { font-size: 9px; }
+  .filter-tabs button { font-size: 10px; }
+  .table-footer { font-size: 9px; }
+  .page-footer { font-size: 8px; }
 }

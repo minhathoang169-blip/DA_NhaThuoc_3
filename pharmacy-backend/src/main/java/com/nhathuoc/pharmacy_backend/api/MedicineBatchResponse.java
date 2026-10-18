@@ -9,6 +9,7 @@ public record MedicineBatchResponse(
         int batchNumber,
         LocalDate expiryDate,
         int quantity,
-        double purchasePrice
+        double purchasePrice,
+        double salePrice
 ) {
 }

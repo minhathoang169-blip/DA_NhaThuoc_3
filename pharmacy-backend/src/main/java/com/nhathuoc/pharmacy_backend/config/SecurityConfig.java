@@ -16,6 +16,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(requests -> requests
                     .requestMatchers(HttpMethod.GET, "/api/medicines/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                     .httpBasic(Customizer.withDefaults())

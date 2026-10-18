@@ -27,13 +27,12 @@ const modules = {
     path: '/api/batches',
     title: 'Lô thuốc',
     singular: 'lô thuốc',
-    description: 'Theo dõi lô, hạn dùng, số lượng và giá nhập.',
+    description: 'Theo dõi mã lô, hạn dùng và giá nhập. Tồn kho chỉ đổi qua phiếu nhập hoặc đơn bán.',
     fields: [
       { key: 'id', label: 'Mã lô', required: true },
       { key: 'medicineId', label: 'Mã sản phẩm', required: true },
       { key: 'batchNumber', label: 'Số lô', type: 'number', required: true },
       { key: 'expiryDate', label: 'Hạn sử dụng', type: 'date', required: true },
-      { key: 'quantity', label: 'Số lượng tồn', type: 'number', required: true },
       { key: 'purchasePrice', label: 'Giá nhập', type: 'number', required: true },
     ],
     columns: [
@@ -178,6 +177,7 @@ export default function CrudModule({ moduleKey, auth }) {
       if (editor.mode === 'create') await axios.post(config.path, payload, { auth })
       else await axios.put(`${config.path}/${encodeURIComponent(editor.id)}`, payload, { auth })
       setEditor(null)
+      window.dispatchEvent(new Event('pharmacy-data-changed'))
       await reload()
     } catch (error) {
       setMessage(error.response?.data?.detail || 'Không lưu được dữ liệu.')
@@ -192,6 +192,7 @@ export default function CrudModule({ moduleKey, auth }) {
     setMessage('')
     try {
       await axios.delete(`${config.path}/${encodeURIComponent(row.id)}`, { auth })
+      window.dispatchEvent(new Event('pharmacy-data-changed'))
       await reload()
     } catch (error) {
       setMessage(error.response?.data?.detail || 'Không xóa được dữ liệu.')

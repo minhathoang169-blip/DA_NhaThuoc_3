@@ -3,7 +3,9 @@ package com.nhathuoc.pharmacy_backend.api;
 import com.nhathuoc.pharmacy_backend.entity.Medicine;
 import com.nhathuoc.pharmacy_backend.entity.MedicineBatch;
 import com.nhathuoc.pharmacy_backend.repository.MedicineBatchRepository;
+import com.nhathuoc.pharmacy_backend.repository.ImportReceiptRepository;
 import com.nhathuoc.pharmacy_backend.repository.MedicineRepository;
+import com.nhathuoc.pharmacy_backend.repository.SaleRepository;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -22,10 +24,15 @@ public class MedicineBatchController {
 
     private final MedicineBatchRepository batchRepository;
     private final MedicineRepository medicineRepository;
+    private final ImportReceiptRepository importRepository;
+    private final SaleRepository saleRepository;
 
-    public MedicineBatchController(MedicineBatchRepository batchRepository, MedicineRepository medicineRepository) {
+    public MedicineBatchController(MedicineBatchRepository batchRepository, MedicineRepository medicineRepository,
+                                   ImportReceiptRepository importRepository, SaleRepository saleRepository) {
         this.batchRepository = batchRepository;
         this.medicineRepository = medicineRepository;
+        this.importRepository = importRepository;
+        this.saleRepository = saleRepository;
     }
 
     @GetMapping
@@ -50,6 +57,7 @@ public class MedicineBatchController {
         MedicineBatch batch = new MedicineBatch();
         batch.setId(request.id().trim());
         applyRequest(batch, request);
+        batch.setQuantity(0);
         MedicineBatch saved = batchRepository.saveAndFlush(batch);
         return ResponseEntity.created(URI.create("/api/batches/" + saved.getId())).body(toResponse(saved));
     }
@@ -59,7 +67,11 @@ public class MedicineBatchController {
     public MedicineBatchResponse updateBatch(@PathVariable String id, @RequestBody MedicineBatchRequest request) {
         validate(request, false);
         MedicineBatch batch = findBatch(id);
+        if (importRepository.hasBatchHistory(id) || saleRepository.hasBatchHistory(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Lô đã có giao dịch; không thể sửa thông tin để bảo toàn lịch sử");
+        }
         applyRequest(batch, request);
+        // Stock changes only through recorded import and sale transactions.
         return toResponse(batchRepository.saveAndFlush(batch));
     }
 
@@ -79,7 +91,7 @@ public class MedicineBatchController {
         if (request == null || (requireId && (request.id() == null || request.id().isBlank() || request.id().length() > 50))
                 || request.medicineId() == null || request.medicineId().isBlank()
                 || request.medicineId().length() > 50 || request.batchNumber() == null
-                || request.expiryDate() == null || request.quantity() == null || request.quantity() < 0
+                || request.expiryDate() == null || (request.quantity() != null && request.quantity() < 0)
                 || request.purchasePrice() == null || request.purchasePrice() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thông tin lô thuốc không hợp lệ");
         }
@@ -91,7 +103,6 @@ public class MedicineBatchController {
         batch.setMedicine(medicine);
         batch.setBatchNumber(request.batchNumber());
         batch.setExpiryDate(request.expiryDate());
-        batch.setQuantity(request.quantity());
         batch.setPurchasePrice(request.purchasePrice());
     }
 
@@ -108,7 +119,8 @@ public class MedicineBatchController {
                 batch.getBatchNumber(),
                 batch.getExpiryDate(),
                 batch.getQuantity(),
-                batch.getPurchasePrice()
+                batch.getPurchasePrice(),
+                batch.getMedicine().getPrice()
         );
     }
 }

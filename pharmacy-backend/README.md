@@ -1,6 +1,6 @@
 # Backend — Quản lý nhà thuốc
 
-Backend REST API dùng Spring Boot, Spring Data JPA và Spring Security. Các Controller hiện có: sản phẩm, lô thuốc, khách hàng, nhân viên và nhà cung cấp. Controller gọi Repository trực tiếp; chưa có Service layer riêng.
+Backend REST API dùng Spring Boot, Spring Data JPA và Spring Security. API hỗ trợ danh mục sản phẩm, lô thuốc, khách hàng, nhân viên, nhà cung cấp, phiếu nhập và đơn bán. Nhập/bán cập nhật tồn theo lô trong cùng transaction; giao dịch đã ghi nhận chỉ đọc để bảo toàn lịch sử. Ở profile SQL Server, trigger tồn kho trong schema hiện có cập nhật số lượng khi ghi chi tiết phiếu; profile local cập nhật tồn trong service.
 
 ## Môi trường và chạy local
 
@@ -54,6 +54,8 @@ Chế độ `-o` ngăn Maven truy cập mạng; nếu thiếu artifact trong cac
 
 ## API danh mục
 
-Các nhóm `/api/medicines`, `/api/batches`, `/api/customers`, `/api/employees`, `/api/suppliers` có GET danh sách, GET theo ID, POST, PUT theo ID và DELETE theo ID. Kiểm tra request/response cụ thể trong các Controller/DTO tương ứng và Postman collection ở thư mục `postman/`.
+Các nhóm `/api/medicines`, `/api/batches`, `/api/customers`, `/api/employees`, `/api/suppliers` có GET danh sách, GET theo ID, POST, PUT theo ID và DELETE theo ID. `/api/imports` và `/api/sales` có GET lịch sử và POST tạo giao dịch; chúng không có PUT/DELETE để giữ lịch sử tồn kho. `/api/auth/me` xác thực thông tin HTTP Basic mà không tải dữ liệu khách hàng.
+
+Tồn kho lô mới khởi tạo bằng 0. Số lượng tồn không thể sửa qua CRUD lô; API giao dịch là nguồn cập nhật tồn duy nhất. Giao dịch không cho phép nhập/bán lô đã hết hạn; bán hàng khóa lô và từ chối số lượng vượt tồn.
 
 `SecurityConfig` tắt CSRF và bật HTTP Basic. Không triển khai môi trường production trước khi có thiết kế xác thực, quản lý tài khoản, phân quyền và cấu hình bảo mật phù hợp.
