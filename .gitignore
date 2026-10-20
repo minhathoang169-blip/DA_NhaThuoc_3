@@ -1,0 +1,17 @@
+# Build output and dependencies
+**/target/
+**/build/
+**/dist/
+**/node_modules/
+**/.dart_tool/
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# IDE/OS files
+.idea/
+.DS_Store
+Thumbs.db

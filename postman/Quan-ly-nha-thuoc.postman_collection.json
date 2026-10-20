@@ -1,0 +1,110 @@
+{
+  "info": {
+    "_postman_id": "4e1b0a31-e7c0-4a50-9a4c-3fadd5293863",
+    "name": "Quan ly nha thuoc - CRUD",
+    "description": "Smoke and CRUD tests for the five catalog APIs. Set apiPassword to the current development password printed by Spring Boot.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{apiUser}}", "type": "string" },
+      { "key": "password", "value": "{{apiPassword}}", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('HTTP request succeeded', function () {",
+          "  pm.expect(pm.response.code).to.be.within(200, 299);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "apiUser", "value": "user" },
+    { "key": "apiPassword", "value": "" },
+    { "key": "medicineId", "value": "" },
+    { "key": "batchId", "value": "" },
+    { "key": "customerId", "value": "" },
+    { "key": "employeeId", "value": "" },
+    { "key": "supplierId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Sản phẩm",
+      "item": [
+        { "name": "List products", "request": { "method": "GET", "url": "{{baseUrl}}/api/medicines" } },
+        {
+          "name": "Create product",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.collectionVariables.set('medicineId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"PM-MED-{{$guid}}\",\n  \"name\": \"Postman medicine\",\n  \"category\": \"Test\",\n  \"price\": 1250\n}" }, "url": "{{baseUrl}}/api/medicines" }
+        },
+        { "name": "Get product", "request": { "method": "GET", "url": "{{baseUrl}}/api/medicines/{{medicineId}}" } },
+        { "name": "Update product", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman medicine updated\",\n  \"category\": \"Test\",\n  \"price\": 1350\n}" }, "url": "{{baseUrl}}/api/medicines/{{medicineId}}" } }
+      ]
+    },
+    {
+      "name": "Lô thuốc",
+      "item": [
+        { "name": "List batches", "request": { "method": "GET", "url": "{{baseUrl}}/api/batches" } },
+        {
+          "name": "Create batch",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.collectionVariables.set('batchId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"PM-BAT-{{$guid}}\",\n  \"medicineId\": \"{{medicineId}}\",\n  \"batchNumber\": 203001,\n  \"expiryDate\": \"2030-12-31\",\n  \"quantity\": 15,\n  \"purchasePrice\": 900\n}" }, "url": "{{baseUrl}}/api/batches" }
+        },
+        { "name": "Get batch", "request": { "method": "GET", "url": "{{baseUrl}}/api/batches/{{batchId}}" } },
+        { "name": "Update batch", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"medicineId\": \"{{medicineId}}\",\n  \"batchNumber\": 203001,\n  \"expiryDate\": \"2030-12-31\",\n  \"quantity\": 20,\n  \"purchasePrice\": 950\n}" }, "url": "{{baseUrl}}/api/batches/{{batchId}}" } },
+        { "name": "Delete batch", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/batches/{{batchId}}" } },
+        { "name": "Delete product", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/medicines/{{medicineId}}" } }
+      ]
+    },
+    {
+      "name": "Khách hàng",
+      "item": [
+        { "name": "List customers", "request": { "method": "GET", "url": "{{baseUrl}}/api/customers" } },
+        {
+          "name": "Create customer",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.collectionVariables.set('customerId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"PM-CUS-{{$guid}}\",\n  \"name\": \"Postman customer\",\n  \"phone\": \"0900000001\",\n  \"address\": \"Test address\"\n}" }, "url": "{{baseUrl}}/api/customers" }
+        },
+        { "name": "Get customer", "request": { "method": "GET", "url": "{{baseUrl}}/api/customers/{{customerId}}" } },
+        { "name": "Update customer", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman customer updated\",\n  \"phone\": \"0900000002\",\n  \"address\": \"Updated address\"\n}" }, "url": "{{baseUrl}}/api/customers/{{customerId}}" } },
+        { "name": "Delete customer", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/customers/{{customerId}}" } }
+      ]
+    },
+    {
+      "name": "Nhân viên",
+      "item": [
+        { "name": "List employees", "request": { "method": "GET", "url": "{{baseUrl}}/api/employees" } },
+        {
+          "name": "Create employee",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.collectionVariables.set('employeeId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"PM-EMP-{{$guid}}\",\n  \"name\": \"Postman employee\",\n  \"phone\": \"0900000003\",\n  \"birthDate\": \"1990-01-01\",\n  \"role\": \"Pharmacist\",\n  \"startDate\": \"2024-01-01\"\n}" }, "url": "{{baseUrl}}/api/employees" }
+        },
+        { "name": "Get employee", "request": { "method": "GET", "url": "{{baseUrl}}/api/employees/{{employeeId}}" } },
+        { "name": "Update employee", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman employee updated\",\n  \"phone\": \"0900000004\",\n  \"birthDate\": \"1990-01-01\",\n  \"role\": \"Manager\",\n  \"startDate\": \"2024-01-01\"\n}" }, "url": "{{baseUrl}}/api/employees/{{employeeId}}" } },
+        { "name": "Delete employee", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/employees/{{employeeId}}" } }
+      ]
+    },
+    {
+      "name": "Nhà cung cấp",
+      "item": [
+        { "name": "List suppliers", "request": { "method": "GET", "url": "{{baseUrl}}/api/suppliers" } },
+        {
+          "name": "Create supplier",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.collectionVariables.set('supplierId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"PM-SUP-{{$guid}}\",\n  \"name\": \"Postman supplier\",\n  \"phone\": \"0900000005\",\n  \"address\": \"Test supplier address\"\n}" }, "url": "{{baseUrl}}/api/suppliers" }
+        },
+        { "name": "Get supplier", "request": { "method": "GET", "url": "{{baseUrl}}/api/suppliers/{{supplierId}}" } },
+        { "name": "Update supplier", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman supplier updated\",\n  \"phone\": \"0900000006\",\n  \"address\": \"Updated supplier address\"\n}" }, "url": "{{baseUrl}}/api/suppliers/{{supplierId}}" } },
+        { "name": "Delete supplier", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/suppliers/{{supplierId}}" } }
+      ]
+    }
+  ]
+}
