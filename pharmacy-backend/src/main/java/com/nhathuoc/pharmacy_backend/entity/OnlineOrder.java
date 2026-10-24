@@ -2,54 +2,48 @@ package com.nhathuoc.pharmacy_backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "online_orders")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class OnlineOrder {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @Column(nullable = false, unique = true, length = 50)
+    private String orderNumber;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private User customer;
 
+    @Column(nullable = false)
     private LocalDateTime orderDate = LocalDateTime.now();
 
+    @Column(nullable = false)
     private double totalAmount;
 
     @Column(length = 30)
-    private String status = "PENDING";
+    private String status = "COMPLETED";
 
     @Column(length = 255)
     private String shippingAddress;
 
-    @OneToMany(mappedBy = "onlineOrder", cascade = CascadeType.ALL)
-    private List<OrderDetail> orderDetails;
-}
+    @Column(length = 20)
+    private String receiverPhone;
 
-@Entity
-@Table(name = "order_details")
-@Data
-class OrderDetail {
+    @Column(length = 100)
+    private String receiverName;
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @ManyToOne
-    @JoinColumn(name = "order_id")
-    private OnlineOrder onlineOrder;
-
-    @ManyToOne
-    @JoinColumn(name = "medicine_id")
-    private Medicine medicine;
-
-    private int quantity;
-
-    private double price;
+    @OneToMany(mappedBy = "onlineOrder", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderDetail> orderDetails = new ArrayList<>();
 }

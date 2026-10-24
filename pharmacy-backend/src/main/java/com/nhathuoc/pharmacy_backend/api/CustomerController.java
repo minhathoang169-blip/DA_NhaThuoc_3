@@ -16,7 +16,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/customers")
-@Profile({"local", "sqlserver"})
 public class CustomerController {
 
     private final CustomerRepository repository;

@@ -28,7 +28,7 @@ class PharmacyBackendApplicationTests {
 	}
 
 	@Test
-	@WithMockUser
+	@WithMockUser(roles = "ADMIN")
 	void productCrudWorks() throws Exception {
 		mockMvc.perform(post("/api/medicines")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -51,7 +51,7 @@ class PharmacyBackendApplicationTests {
 	}
 
 	@Test
-	@WithMockUser
+	@WithMockUser(roles = "ADMIN")
 	void batchCrudWorks() throws Exception {
 		mockMvc.perform(post("/api/batches")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -74,7 +74,7 @@ class PharmacyBackendApplicationTests {
 	}
 
 	@Test
-	@WithMockUser
+	@WithMockUser(roles = "ADMIN")
 	void customerCrudWorks() throws Exception {
 		mockMvc.perform(post("/api/customers")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -97,7 +97,7 @@ class PharmacyBackendApplicationTests {
 	}
 
 	@Test
-	@WithMockUser
+	@WithMockUser(roles = "ADMIN")
 	void supplierCrudWorks() throws Exception {
 		mockMvc.perform(post("/api/suppliers")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -120,7 +120,7 @@ class PharmacyBackendApplicationTests {
 	}
 
 	@Test
-	@WithMockUser
+	@WithMockUser(roles = "ADMIN")
 	void employeeCrudWorks() throws Exception {
 		mockMvc.perform(post("/api/employees")
 				.contentType(MediaType.APPLICATION_JSON)

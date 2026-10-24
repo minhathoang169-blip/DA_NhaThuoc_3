@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/medicines")
-@Profile({"local", "sqlserver"})
 public class MedicineController {
 
     private final MedicineRepository medicineRepository;

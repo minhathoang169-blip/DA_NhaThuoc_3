@@ -2,11 +2,15 @@ package com.nhathuoc.pharmacy_backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "LoThuoc")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class MedicineBatch {
 
     @Id
@@ -16,7 +20,7 @@ public class MedicineBatch {
     @Column(name = "SoLo", nullable = false)
     private int batchNumber;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "MaSanPham", nullable = false)
     private Medicine medicine;
 

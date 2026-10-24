@@ -17,7 +17,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/batches")
-@Profile({"local", "sqlserver"})
 public class MedicineBatchController {
 
     private final MedicineBatchRepository batchRepository;

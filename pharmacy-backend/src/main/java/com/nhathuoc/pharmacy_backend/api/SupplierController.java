@@ -15,7 +15,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/suppliers")
-@Profile({"local", "sqlserver"})
 public class SupplierController {
 
     private final SupplierRepository repository;
