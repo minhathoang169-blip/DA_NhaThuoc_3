@@ -1,15 +1,128 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/medicine.dart';
 import '../models/order.dart';
 
-class PharmacyApiService {
+class MobileUserSession {
+  final int id;
+  final String username;
+  final String fullName;
+  final String role;
+  final String token;
+
+  MobileUserSession({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.role,
+    required this.token,
+  });
+
+  factory MobileUserSession.fromJson(Map<String, dynamic> json) {
+    return MobileUserSession(
+      id: (json['id'] is num) ? (json['id'] as num).toInt() : 0,
+      username: json['username']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? json['username']?.toString() ?? 'Khách hàng',
+      role: json['role']?.toString() ?? 'CUSTOMER',
+      token: json['token']?.toString() ?? '',
+    );
+  }
+}
+
+class PharmacyApiService extends ChangeNotifier {
   static final PharmacyApiService _instance = PharmacyApiService._internal();
   factory PharmacyApiService() => _instance;
   PharmacyApiService._internal();
 
-  /// 1. Tìm kiếm và lấy danh mục thuốc từ CSDL thật
+  MobileUserSession? _currentUser;
+  String? _lastOrderCode;
+
+  MobileUserSession? get currentUser => _currentUser;
+  bool get isLoggedIn => _currentUser != null && _currentUser!.token.isNotEmpty;
+  String? get lastOrderCode => _lastOrderCode;
+
+  /// Đăng nhập tài khoản (bảng dbo.users)
+  Future<MobileUserSession> login({
+    required String username,
+    required String password,
+  }) async {
+    final uri = Uri.parse(ApiConfig.login);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'username': username.trim(),
+            'password': password,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+      _currentUser = MobileUserSession.fromJson(data);
+      notifyListeners();
+      return _currentUser!;
+    } else {
+      String msg = 'Tài khoản hoặc mật khẩu không chính xác';
+      try {
+        final Map<String, dynamic> err = jsonDecode(utf8.decode(response.bodyBytes));
+        if (err['message'] != null) msg = err['message'].toString();
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  /// Đăng ký tài khoản Khách hàng mới (bảng dbo.users) và tự động đăng nhập
+  Future<MobileUserSession> registerCustomer({
+    required String username,
+    required String password,
+    required String fullName,
+    String? phone,
+    String? email,
+  }) async {
+    final uri = Uri.parse(ApiConfig.register);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'username': username.trim(),
+            'password': password,
+            'fullName': fullName.trim(),
+            'phone': (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
+            'email': (email != null && email.trim().isNotEmpty) ? email.trim() : null,
+            'role': 'CUSTOMER',
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return await login(username: username, password: password);
+    } else {
+      String msg = 'Không thể đăng ký tài khoản (Username hoặc Email đã tồn tại)';
+      try {
+        final Map<String, dynamic> err = jsonDecode(utf8.decode(response.bodyBytes));
+        if (err['message'] != null) msg = err['message'].toString();
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  void logout() {
+    _currentUser = null;
+    notifyListeners();
+  }
+
+  /// 1. Tìm kiếm và lấy danh mục thuốc từ CSDL thật (SanPham & LoThuoc)
   Future<List<Medicine>> getMedicines({String query = ''}) async {
     final uri = Uri.parse(
       query.trim().isEmpty
@@ -27,7 +140,7 @@ class PharmacyApiService {
         throw Exception('Mã phản hồi từ máy chủ: ${response.statusCode}');
       }
     } catch (e) {
-      // Fallback sang endpoint danh mục cũ /api/medicines nếu v1 lỗi
+      // Fallback sang endpoint danh mục /api/medicines nếu cần
       try {
         final fallbackUri = Uri.parse('${ApiConfig.baseUrl}/medicines');
         final fallbackRes = await http.get(fallbackUri).timeout(const Duration(seconds: 5));
@@ -74,18 +187,28 @@ class PharmacyApiService {
       'items': items,
     };
 
-    final response = await http.post(
-      uri,
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 12));
+    final headers = <String, String>{
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Accept': 'application/json',
+    };
+    if (isLoggedIn) {
+      headers['Authorization'] = 'Bearer ${_currentUser!.token}';
+    }
+
+    final response = await http
+        .post(
+          uri,
+          headers: headers,
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 12));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final Map<String, dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
-      return OrderTrackingResult.fromJson(data);
+      final result = OrderTrackingResult.fromJson(data);
+      _lastOrderCode = result.orderNumber;
+      notifyListeners();
+      return result;
     } else {
       String errorMessage = 'Đặt hàng không thành công (HTTP ${response.statusCode})';
       try {
@@ -98,9 +221,10 @@ class PharmacyApiService {
     }
   }
 
-  /// 4. Tra cứu hành trình đơn hàng theo mã (VD: ORD-20261024-XXXX)
+  /// 4. Tra cứu hành trình đơn hàng theo mã (VD: MOB-2024-9981 hoặc ONL-...)
   Future<OrderTrackingResult> trackOrder(String orderCode) async {
-    final uri = Uri.parse(ApiConfig.trackOrder(orderCode.trim()));
+    final cleaned = orderCode.trim().replaceAll(RegExp(r'^#'), '');
+    final uri = Uri.parse(ApiConfig.trackOrder(cleaned));
 
     final response = await http.get(uri).timeout(const Duration(seconds: 8));
 
@@ -108,7 +232,7 @@ class PharmacyApiService {
       final Map<String, dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
       return OrderTrackingResult.fromJson(data);
     } else if (response.statusCode == 404) {
-      throw Exception('Không tìm thấy đơn hàng có mã "$orderCode".');
+      throw Exception('Không tìm thấy đơn hàng có mã "$cleaned" trong CSDL.');
     } else {
       throw Exception('Không thể tra cứu đơn hàng (HTTP ${response.statusCode})');
     }

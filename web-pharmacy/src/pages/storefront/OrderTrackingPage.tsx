@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, Link } from 'react-router-dom';
 import api from '../../services/api';
@@ -17,13 +17,6 @@ export const OrderTrackingPage: React.FC = () => {
 
   const [orderCode, setOrderCode] = useState(initialCode);
   const [submittedCode, setSubmittedCode] = useState(initialCode);
-
-  useEffect(() => {
-    if (initialCode) {
-      setOrderCode(initialCode);
-      setSubmittedCode(initialCode);
-    }
-  }, [initialCode]);
 
   // Polling mỗi 5s để cập nhật ngay khi Admin đổi trạng thái đơn
   const { data: order, isLoading, isError } = useQuery({
@@ -48,6 +41,8 @@ export const OrderTrackingPage: React.FC = () => {
         return <span style={{ background: '#fef3c7', color: '#b45309', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>⏳ Chờ Xác Nhận</span>;
       case 'CONFIRMED':
         return <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>📋 Đã Xác Nhận Đơn</span>;
+      case 'PACKED':
+        return <span style={{ background: '#e0e7ff', color: '#4338ca', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>📦 Đã Đóng Gói FEFO</span>;
       case 'SHIPPING':
         return <span style={{ background: '#f3e8ff', color: '#7e22ce', padding: '4px 12px', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>🚚 Đang Giao Hàng</span>;
       case 'COMPLETED':
@@ -68,15 +63,15 @@ export const OrderTrackingPage: React.FC = () => {
           Tra Cứu Tiến Độ Đơn Hàng Thời Gian Thực
         </h1>
         <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 24px' }}>
-          Nhập mã đơn hàng bạn đã nhận (VD: <code>ONL-20261024-XXXX</code>) để theo dõi trạng thái đóng gói và giao hàng.
+          Nhập mã đơn hàng bạn đã nhận (VD: <code>ORD-1001</code> hoặc <code>ONL-...</code>) để theo dõi trạng thái đóng gói và giao hàng.
         </p>
 
         {/* Input Form */}
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
           <input
             type="text"
             required
-            placeholder="Nhập mã đơn hàng (VD: ONL-...)"
+            placeholder="Nhập mã đơn hàng (VD: ORD-1001, ONL-...)"
             value={orderCode}
             onChange={(e) => setOrderCode(e.target.value)}
             style={{
@@ -105,6 +100,33 @@ export const OrderTrackingPage: React.FC = () => {
             Tra Cứu Ngay
           </button>
         </form>
+
+        {/* Quick Order Codes from Database */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+          <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Đơn hàng có sẵn trong CSDL:</span>
+          {['ONL-20261026-153810-F9F6', 'MOB-2024-9975', 'MOB-2024-9981', 'MOB-2024-9980', 'MOB-2024-9978'].map((sampleCode) => (
+            <button
+              key={sampleCode}
+              type="button"
+              onClick={() => {
+                setOrderCode(sampleCode);
+                setSubmittedCode(sampleCode);
+              }}
+              style={{
+                background: submittedCode === sampleCode ? '#0f766e' : '#f1f5f9',
+                color: submittedCode === sampleCode ? '#ffffff' : '#0f766e',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {sampleCode}
+            </button>
+          ))}
+        </div>
 
         {/* Live sync banner */}
         {submittedCode && (
@@ -208,7 +230,7 @@ export const OrderTrackingPage: React.FC = () => {
         )}
 
         <div style={{ marginTop: 24, textAlign: 'center' }}>
-          <Link to="/" style={{ color: '#0f766e', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
+          <Link to="/store" style={{ color: '#0f766e', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
             ← Quay lại trang danh mục sản phẩm
           </Link>
         </div>

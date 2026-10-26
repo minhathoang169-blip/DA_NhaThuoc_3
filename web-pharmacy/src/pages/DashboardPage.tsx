@@ -1,496 +1,397 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { DashboardOverviewResponse } from '../types/pharmacy';
+import { useAuth } from '../context/AuthContext';
+import {
+  DashboardOverviewResponse,
+  DashboardMetricsResponse,
+  BatchInventoryDto,
+  OnlineOrder,
+} from '../types/pharmacy';
+import { 
+  TrendingUp, ShoppingBag, AlertOctagon, DollarSign, 
+  ArrowUpRight, Clock, ShieldAlert, CheckCircle2, 
+  CalendarClock, RefreshCw, Layers, Activity, Store, Smartphone, AlertTriangle
+} from 'lucide-react';
 
-const currency = new Intl.NumberFormat('vi-VN', {
-  style: 'currency',
-  currency: 'VND',
-  maximumFractionDigits: 0,
-});
+interface DashboardCombinedData {
+  shiftRevenue: number;
+  todayAppRevenue: number;
+  totalRevenue: number;
+  totalCompletedOrders: number;
+  expiringBatchesCount: number;
+  totalBatchesCount: number;
+  recentOrders: OnlineOrder[];
+  fefoBatches: BatchInventoryDto[];
+}
 
-export const DashboardPage: React.FC = () => {
-  const { data: overview, isLoading, isError, refetch } = useQuery<DashboardOverviewResponse>({
-    queryKey: ['dashboardOverviewDetail'],
+export function DashboardPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
+  // Fetch Dashboard Overview + Batches + Orders from Backend
+  const { data: overview, isLoading, isError, refetch } = useQuery<DashboardCombinedData>({
+    queryKey: ['dashboard-overview', user?.role],
     queryFn: async () => {
-      const res = await api.get('/v1/dashboard/overview');
-      return res.data;
+      const [ordersRes, batchesRes] = await Promise.all([
+        api.get<OnlineOrder[]>('/v1/orders'),
+        api.get<BatchInventoryDto[]>('/v1/inventory/batches?status=all'),
+      ]);
+
+      const ordersList = Array.isArray(ordersRes.data) ? ordersRes.data : [];
+      const batchesList = Array.isArray(batchesRes.data) ? batchesRes.data : [];
+
+      // Sort all batches by daysRemaining ascending (FEFO: First-Expired, First-Out)
+      const sortedFefoBatches = [...batchesList].sort(
+        (a, b) => Number(a.daysRemaining ?? 0) - Number(b.daysRemaining ?? 0)
+      );
+
+      // Count batches needing attention (<= 90 days or expired)
+      const expiringUnder90Count = sortedFefoBatches.filter(
+        (b) => Number(b.daysRemaining ?? 0) <= 90
+      ).length;
+
+      if (isAdmin) {
+        const ovRes = await api.get<DashboardOverviewResponse>('/v1/dashboard/overview');
+        const ov = ovRes.data;
+        return {
+          shiftRevenue: Number(ov.shiftRevenue ?? 0),
+          todayAppRevenue: Number(ov.todayAppRevenue ?? 0),
+          totalRevenue: Number(ov.totalRevenue ?? 0),
+          totalCompletedOrders: Number(ov.totalOrdersCount ?? ordersList.length),
+          expiringBatchesCount: Math.max(Number(ov.expiringBatchesCount ?? 0), expiringUnder90Count),
+          totalBatchesCount: sortedFefoBatches.length,
+          recentOrders: ordersList.slice(0, 6),
+          fefoBatches: sortedFefoBatches.slice(0, 10),
+        };
+      }
+
+      // Fallback for PHARMACIST role
+      const metricsRes = await api.get<DashboardMetricsResponse>('/v1/dashboard/metrics');
+      const m = metricsRes.data;
+      return {
+        shiftRevenue: Number(m.todayRevenue ?? 0),
+        todayAppRevenue: 0,
+        totalRevenue: Number(m.totalRevenue ?? 0),
+        totalCompletedOrders: Number(m.totalOrders ?? ordersList.length),
+        expiringBatchesCount: Math.max(Number(m.expiringBatchesCount ?? 0), expiringUnder90Count),
+        totalBatchesCount: sortedFefoBatches.length,
+        recentOrders: ordersList.slice(0, 6),
+        fefoBatches: sortedFefoBatches.slice(0, 10),
+      };
     },
-    refetchInterval: 10000,
   });
 
-  const totalRev = overview?.totalRevenue ?? 0;
-  const posRev = overview?.posRevenue ?? 0;
-  const appRev = overview?.appRevenue ?? 0;
-  const posPct = overview?.posPercentage ?? 0;
-  const appPct = overview?.appPercentage ?? 0;
-  const posOrders = overview?.posOrdersCount ?? 0;
-  const appOrders = overview?.appOrdersCount ?? 0;
-  const totalOrders = overview?.totalOrdersCount ?? 0;
-  const expiringCount = overview?.expiringBatchesCount ?? 0;
-  const criticalCount = overview?.criticalBatchesCount ?? 0;
-  const lowStockCount = overview?.lowStockCount ?? 0;
-  const dailyRevenue = overview?.dailyRevenue ?? [];
-  const maxDailyRevenue = Math.max(1, ...dailyRevenue.map((item) => item.revenue));
-  const topSellingMedicines = overview?.topSellingMedicines ?? [];
-
-  if (isLoading && !overview) {
+  if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400, flexDirection: 'column', gap: 12 }}>
-        <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTop: '3px solid #0f766e', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <span style={{ color: '#64748b', fontSize: 13, fontWeight: 600 }}>Đang nạp dữ liệu thống kê doanh thu & kho vận...</span>
+      <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+        <div className="h-24 bg-white rounded-2xl border border-slate-200 animate-pulse p-6" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-32 bg-white rounded-2xl border border-slate-200 animate-pulse p-6" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (isError && !overview) {
-    return <section role="alert" style={{ display: 'grid', minHeight: 300, placeItems: 'center', padding: 24, border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', textAlign: 'center' }}>
-      <div><strong style={{ color: '#7f302b' }}>Không tải được báo cáo từ API.</strong><p style={{ color: '#64748b', margin: '8px 0 14px' }}>Kiểm tra máy chủ hoặc quyền truy cập rồi thử lại.</p><button type="button" onClick={() => refetch()} style={{ padding: '9px 14px', border: 0, borderRadius: 8, color: '#fff', background: '#064e3b', fontWeight: 700, cursor: 'pointer' }}>Thử tải lại</button></div>
-    </section>;
+  if (isError || !overview) {
+    return (
+      <div className="p-12 text-center">
+        <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+        <h3 className="text-lg font-bold text-slate-800">Không thể tải dữ liệu Bảng Điều Khiển</h3>
+        <p className="text-xs text-slate-500 mt-1">Vui lòng kiểm tra kết nối tới máy chủ Spring Boot</p>
+        <button
+          onClick={() => refetch()}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       
-      {/* ========================================================
-          TOP HEADER & TIMELINE FILTER TOOLBAR
-          ======================================================== */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#0f766e', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>📈</span>
-            <span>BÁO CÁO HOẠT ĐỘNG & PHÂN TÍCH DOANH THU</span>
+      {/* Top Executive Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold">
+            <Activity className="w-3.5 h-3.5 animate-pulse" />
+            Hệ thống Quản Lý Nhà Thuốc — Cơ sở dữ liệu SQL Server (QuanLyNhaThuocDB)
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '4px 0 2px', letterSpacing: '-0.02em' }}>
-            Báo Cáo Doanh Thu & Vận Hành
+          <h1 className="text-2xl font-black tracking-tight mt-1">
+            Tổng Quan Điều Hành & Kiểm Soát Tồn Kho FEFO
           </h1>
-          <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
-            Thống kê đa chiều: Doanh thu quầy POS Dược sĩ, đơn khách Mobile App và hệ thống giám sát cảnh báo an toàn kho GPP.
+          <p className="text-xs text-slate-300">
+            Số liệu thống kê trực tiếp từ các bảng <code className="font-mono">invoices</code>, <code className="font-mono">online_orders</code>, <code className="font-mono">SanPham</code> và <code className="font-mono">LoThuoc</code>.
           </p>
         </div>
 
-        <span style={{ padding: '7px 11px', border: '1px solid #dce9df', borderRadius: 999, color: '#286341', background: '#f1faf3', fontSize: 11, fontWeight: 700 }}>Cập nhật từ API mỗi 10 giây</span>
-      </div>
-
-      {/* ========================================================
-          4 THẺ CHỈ SỐ DOANH THU & AN TOÀN KHO
-          ======================================================== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>
-        
-        {/* Card 1: Tổng Doanh Thu */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '18px 20px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-              TỔNG DOANH THU TÍCH LŨY
-            </span>
-            <span style={{ fontSize: 16, color: '#0f766e' }}>💵</span>
-          </div>
-
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '8px 0 10px' }}>
-            {currency.format(totalRev)}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: '#64748b', borderTop: '1px dashed #f1f5f9', paddingTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Tại quầy POS:</span>
-              <strong style={{ color: '#0f172a' }}>{currency.format(posRev)}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Mobile App:</span>
-              <strong style={{ color: '#0f172a' }}>{currency.format(appRev)}</strong>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#059669', fontWeight: 700, marginTop: 8 }}>
-            📈 +12.6% so với tuần trước
-          </div>
-        </div>
-
-        {/* Card 2: Tổng Đơn Hàng */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '18px 20px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-              TỔNG ĐƠN HÀNG HOÀN TẤT
-            </span>
-            <span style={{ fontSize: 16, color: '#0f766e' }}>📑</span>
-          </div>
-
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '8px 0 10px' }}>
-            {totalOrders} <span style={{ fontSize: 15, fontWeight: 700, color: '#64748b' }}>đơn</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: '#64748b', borderTop: '1px dashed #f1f5f9', paddingTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đơn quầy:</span>
-              <strong style={{ color: '#0f172a' }}>{posOrders} lượt</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Đơn Mobile:</span>
-              <strong style={{ color: '#0f172a' }}>{appOrders} đơn</strong>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#059669', fontWeight: 700, marginTop: 8 }}>
-            ✅ Tỷ lệ thành công 98.6%
-          </div>
-        </div>
-
-        {/* Card 3: Cảnh Báo Cận Hạn */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '18px 20px',
-          border: '1px solid #fee2e2',
-          borderLeft: '4px solid #ef4444',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase' }}>
-              CẢNH BÁO CẬN HẠN (&lt; 30 NGÀY)
-            </span>
-            <span style={{ background: '#fee2e2', color: '#dc2626', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12 }}>
-              !
-            </span>
-          </div>
-
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#dc2626', margin: '8px 0 6px' }}>
-            {expiringCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô thuốc</span>
-          </div>
-
-          <div style={{ fontSize: 11.5, color: '#7f1d1d', marginTop: 4 }}>
-            Trong đó: <strong style={{ color: '#b91c1c' }}>{criticalCount} lô nguy cấp</strong> (&lt; 15 ngày)
-          </div>
-          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
-            Quy tắc FEFO ưu tiên xả kho trước.
-          </div>
-
-          <Link to="/inventory" style={{ display: 'inline-block', marginTop: 8, fontSize: 11.5, color: '#dc2626', fontWeight: 800, textDecoration: 'none' }}>
-            Kiểm tra lô ngay →
-          </Link>
-        </div>
-
-        {/* Card 4: Tồn Kho Tối Thiểu */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '18px 20px',
-          border: '1px solid #fef3c7',
-          borderLeft: '4px solid #f59e0b',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>
-              TỒN KHO TỐI THIỂU (&lt; 20 HỘP)
-            </span>
-            <span style={{ background: '#fef3c7', color: '#b45309', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-              🛒
-            </span>
-          </div>
-
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#b45309', margin: '8px 0 6px' }}>
-            {lowStockCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Loại</span>
-          </div>
-
-          <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>
-            Cần lên kế hoạch đặt hàng NCC sớm
-          </div>
-          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
-            Kháng sinh & Giảm đau đang cạn kho.
-          </div>
-
-          <Link to="/inventory" style={{ display: 'inline-block', marginTop: 8, fontSize: 11.5, color: '#b45309', fontWeight: 800, textDecoration: 'none' }}>
-            Tạo đơn nhập kho →
-          </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl text-xs font-bold text-white transition-all cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Cập nhật số liệu
+          </button>
+          <button
+            onClick={() => navigate('/pos')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+          >
+            Mở Quầy Thu Ngân POS
+            <ArrowUpRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* ========================================================
-          MIDDLE SECTION: BIỂU ĐỒ 7 NGÀY & CƠ CẤU KÊNH BÁN
-          ======================================================== */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      {/* KPI Metrics Grid (100% Real Data from Backend) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Total Revenue */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Tổng Doanh Thu Hệ Thống</span>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <DollarSign className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-black text-slate-900">
+              {Number(overview.totalRevenue || 0).toLocaleString('vi-VN')} ₫
+            </p>
+            <p className="text-[11px] font-bold text-blue-600 mt-1 flex items-center gap-1">
+              <TrendingUp className="w-3.5 h-3.5" /> Tổng hợp hóa đơn POS + Đơn Online hoàn tất
+            </p>
+          </div>
+        </div>
+
+        {/* KPI 2: Today Shift POS Revenue & Online Revenue */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Doanh Thu Trong Ngày</span>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Store className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium flex items-center gap-1">
+                <Store className="w-3.5 h-3.5 text-emerald-600" /> Tại quầy POS:
+              </span>
+              <strong className="text-slate-900 font-black">
+                {Number(overview.shiftRevenue || 0).toLocaleString('vi-VN')} ₫
+              </strong>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium flex items-center gap-1">
+                <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> Đơn Online:
+              </span>
+              <strong className="text-indigo-600 font-black">
+                {Number(overview.todayAppRevenue || 0).toLocaleString('vi-VN')} ₫
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 3: Completed Orders */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Tổng Số Đơn Giao Dịch</span>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <ShoppingBag className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-black text-slate-900">
+              {overview.totalCompletedOrders} <span className="text-xs font-semibold text-slate-500">đơn</span>
+            </p>
+            <p className="text-[11px] font-bold text-indigo-600 mt-1">
+              Đếm trực tiếp từ bảng invoices & online_orders
+            </p>
+          </div>
+        </div>
+
+        {/* KPI 4: Expiring / Active Batches Alert */}
+        <div 
+          onClick={() => navigate('/batches')}
+          className="bg-rose-50/70 hover:bg-rose-50 p-5 rounded-2xl border border-rose-200 shadow-xs flex flex-col justify-between cursor-pointer transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-rose-700">Theo Dõi Lô Thuốc (LoThuoc)</span>
+            <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <AlertOctagon className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-black text-rose-700">
+              {overview.expiringBatchesCount} <span className="text-xs font-semibold text-rose-600">lô cận hạn (&le; 90 ngày) / {overview.totalBatchesCount} lô</span>
+            </p>
+            <p className="text-[11px] font-bold text-rose-600 mt-1 underline">
+              Bấm để kiểm tra chi tiết bảng LoThuoc →
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Two-Column Detail Panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Biểu đồ 7 ngày (62%) */}
-        <div style={{
-          flex: '1 1 60%',
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '20px 22px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Left: All Batches FEFO Watchlist sorted by nearest expiry (7 cols) */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-slate-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Layers className="w-5 h-5 text-indigo-600" />
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: '0 0 2px' }}>
-                  Biến Động Doanh Thu 7 Ngày Gần Nhất
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Danh Sách Lô Thuốc & Hạn Dùng FEFO (Bảng LoThuoc)
                 </h2>
-                <div style={{ fontSize: 11.5, color: '#64748b' }}>
-                  Tổng hợp số liệu bán lẻ trực tiếp tại quầy thuốc và đơn đặt hàng qua ứng dụng.
-                </div>
-              </div>
-
-              <span style={{ fontSize: 11, color: '#52645a' }}>Tổng doanh thu / ngày</span>
-            </div>
-
-            {/* Barchart Visualization */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 170, paddingTop: 24, paddingBottom: 6 }}>
-              {dailyRevenue.map((d, idx) => {
-                const barHeight = d.revenue > 0 ? Math.max(4, Math.round((d.revenue / maxDailyRevenue) * 100)) : 0;
-
-                return (
-                  <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end', gap: 4 }}>
-                    <div title={currency.format(d.revenue)} style={{ width: '100%', maxWidth: 36, height: `${barHeight}%`, minHeight: barHeight ? 4 : 0, background: '#0a4d44', borderRadius: '4px 4px 0 0' }} />
-
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginTop: 4 }}>
-                      {d.date.length > 5 ? d.date.slice(5) : d.date}
-                    </div>
-                    <div style={{ fontSize: 9.5, color: '#94a3b8' }}>
-                      {d.orderCount} đơn
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Cơ Cấu Kênh Bán (38%) */}
-        <div style={{
-          flex: '1 1 36%',
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '20px 22px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                Cơ Cấu Kênh Bán
-              </h2>
-              <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
-                Tổng cộng
-              </span>
-            </div>
-
-            {/* Circular Donut Diagram */}
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '14px 0' }}>
-              <div style={{
-                width: 140,
-                height: 140,
-                borderRadius: '50%',
-                background: `conic-gradient(#0a4d44 0% ${posPct}%, #10b981 ${posPct}% 100%)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(10, 77, 68, 0.15)'
-              }}>
-                <div style={{
-                  width: 96,
-                  height: 96,
-                  borderRadius: '50%',
-                  background: '#ffffff',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 4,
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>KÊNH CHÍNH</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: '#0a4d44' }}>{posPct}%</div>
-                  <div style={{ fontSize: 8.5, color: '#94a3b8' }}>Tại Nhà Thuốc</div>
-                </div>
+                <p className="text-xs text-slate-500">
+                  Sắp xếp theo thứ tự ưu tiên xuất kho FEFO (Lô có hạn sử dụng gần nhất xếp trên cùng)
+                </p>
               </div>
             </div>
-
-            {/* Breakdown Rows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0a4d44' }} />
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>Quầy POS Dược Sĩ</div>
-                    <div style={{ fontSize: 10.5, color: '#64748b' }}>{posOrders} lượt giao dịch</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>{currency.format(posRev)}</div>
-                  <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>{posPct}%</div>
-                </div>
-              </div>
-
-              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: '#10b981' }} />
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>Khách Đặt Mobile App</div>
-                    <div style={{ fontSize: 10.5, color: '#64748b' }}>{appOrders} đơn giao tận nơi</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>{currency.format(appRev)}</div>
-                  <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>{appPct}%</div>
-                </div>
-              </div>
-            </div>
+            <button
+              onClick={() => navigate('/batches')}
+              className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+            >
+              Xem toàn bộ kho ({overview.totalBatchesCount}) →
+            </button>
           </div>
 
-          <div style={{ background: '#f0fdf4', padding: '8px 10px', borderRadius: 8, border: '1px solid #bbf7d0', fontSize: 10.5, color: '#166534', display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
-            <span>✅</span>
-            <span>GPP Tiêu chuẩn: 100% đơn bán theo đơn đều được dược sĩ thẩm định đơn thuốc số.</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          BOTTOM SECTION: TOP 5 MẶT HÀNG BÁN CHẠY NHẤT TRONG KỲ
-          ======================================================== */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 14,
-        padding: '20px 22px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>📋</span>
-              <h2 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                Mặt Hàng Bán Chạy
-              </h2>
-              <span style={{ fontSize: 11, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 6 }}>
-                API tổng hợp
-              </span>
-            </div>
-            <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>
-              Dữ liệu định lượng thuốc kê đơn & OTC phục vụ điều phối dự trù kho định kỳ.
-            </div>
-          </div>
-
-          <Link to="/medicines" style={{ fontSize: 12, fontWeight: 800, color: '#0f766e', textDecoration: 'none' }}>
-            Xem danh mục thuốc ↗
-          </Link>
-        </div>
-
-        {/* Table Top 5 */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
-            <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 800, fontSize: 11, textTransform: 'uppercase' }}>
-              <tr>
-                <th style={{ padding: '10px 14px' }}>TÊN THUỐC & QUY CÁCH</th>
-                <th style={{ padding: '10px 14px' }}>HOẠT CHẤT & NỒNG ĐỘ</th>
-                <th style={{ padding: '10px 14px', textAlign: 'center' }}>SỐ LƯỢNG BÁN</th>
-                <th style={{ padding: '10px 14px' }}>DOANH THU ĐÓNG GÓP</th>
-                <th style={{ padding: '10px 14px', textAlign: 'center' }}>TỒN KHO KHẢ DỤNG</th>
-                <th style={{ padding: '10px 14px' }}>TÌNH TRẠNG AN TOÀN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topSellingMedicines.length === 0 && <tr><td colSpan={6} style={{ padding: 22, color: '#64748b', textAlign: 'center' }}>API chưa có dữ liệu bán hàng để xếp hạng.</td></tr>}
-              {topSellingMedicines.map((item) => (
-                <tr key={item.rank} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 900, color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}>
-                        #{item.rank}
-                      </span>
-                      <div>
-                        <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.medicineName}</div>
-                        <div style={{ fontSize: 10.5, color: '#94a3b8' }}>Hộp tiêu chuẩn • Mã {item.medicineId}</div>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ background: '#f1f5f9', color: '#334155', padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-                      {item.activeIngredient}
-                    </span>
-                  </td>
-
-                  <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 800, color: '#0f172a' }}>
-                    {item.quantitySold} {item.unit}
-                  </td>
-
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ fontWeight: 800, color: '#0f766e' }}>{currency.format(item.revenue)}</div>
-                    <div style={{ fontSize: 10.5, color: '#64748b' }}>{item.percentage}% tổng thu</div>
-                  </td>
-
-                  <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 800 }}>
-                    {item.availableStock} {item.unit}
-                  </td>
-
-                  <td style={{ padding: '12px 14px' }}>
-                    {item.safetyStatus === 'SAFE' && (
-                      <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span>●</span> TỒN AN TOÀN (XANH)
-                      </span>
-                    )}
-                    {item.safetyStatus === 'WARNING' && (
-                      <span style={{ background: '#fef3c7', color: '#b45309', padding: '4px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span>●</span> CẦN NHẬP GẤP (&lt; 20)
-                      </span>
-                    )}
-                    {item.safetyStatus === 'CRITICAL' && (
-                      <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '4px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span>●</span> BÁO ĐỘNG CẠN KHO
-                      </span>
-                    )}
-                  </td>
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
+                  <th className="py-3 px-4">Mã Lô / Số Lô</th>
+                  <th className="py-3 px-4">Sản Phẩm Thuốc</th>
+                  <th className="py-3 px-4">Hạn Dùng</th>
+                  <th className="py-3 px-4 text-center">Tồn Kho</th>
+                  <th className="py-3 px-4">Trạng Thái FEFO</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ========================================================
-          GPP COMPLIANCE FOOTER BANNER
-          ======================================================== */}
-      <div style={{
-        background: '#042f2e',
-        color: '#ffffff',
-        borderRadius: 12,
-        padding: '14px 20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>🛡️</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>Hệ Thống Quản Lý Dược Chuẩn GPP (Good Pharmacy Practice)</div>
-            <div style={{ fontSize: 11, color: '#99f6e4', marginTop: 1 }}>Theo dõi doanh thu, đơn hàng và cảnh báo tồn kho từ API nhà thuốc.</div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(overview.fefoBatches || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-400">
+                      Chưa có lô thuốc nào trong bảng LoThuoc.
+                    </td>
+                  </tr>
+                ) : (
+                  overview.fefoBatches.map((b) => {
+                    const days = Number(b.daysRemaining ?? 0);
+                    return (
+                      <tr key={b.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            {b.id} ({b.batchNumber})
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-800">{b.medicineName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{b.medicineId} • {b.category}</div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-700">
+                          <div className="flex items-center gap-1 font-bold">
+                            <CalendarClock className="w-3.5 h-3.5 text-slate-400" />
+                            {b.expiryDate}
+                          </div>
+                          <span className={`text-[10px] font-bold ${
+                            days <= 15 ? 'text-rose-600' : days <= 90 ? 'text-amber-600' : 'text-emerald-600'
+                          }`}>
+                            {days < 0 ? `Quá hạn ${Math.abs(days)} ngày` : `Còn ${days} ngày`}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-black text-slate-900">
+                          {Number(b.quantity ?? 0).toLocaleString('vi-VN')} đv
+                        </td>
+                        <td className="py-3 px-4">
+                          {days < 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900 text-white font-bold text-[10px]">
+                              Quá hạn (Đã khóa)
+                            </span>
+                          ) : days <= 15 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10px]">
+                              <AlertOctagon className="w-3 h-3" /> Khẩn cấp &le; 15d (Khóa)
+                            </span>
+                          ) : days <= 90 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-bold text-[10px]">
+                              <AlertTriangle className="w-3 h-3" /> Cận hạn &le; 90d (Ưu tiên FEFO)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
+                              <CheckCircle2 className="w-3 h-3" /> An toàn (&gt; 90 ngày)
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#34d399', background: 'rgba(255,255,255,0.1)', padding: '5px 12px', borderRadius: 6 }}>API polling 10 giây</div>
-      </div>
+        {/* Right: Recent Online Orders Feed (5 cols) */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-slate-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <ShoppingBag className="w-5 h-5 text-blue-600" />
+              <div>
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Đơn Đặt Hàng Online Gần Đây (online_orders)
+                </h2>
+                <p className="text-xs text-slate-500">Các đơn hàng mới nhất trong hệ thống</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/orders')}
+              className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+            >
+              Điều phối đơn →
+            </button>
+          </div>
 
+          <div className="p-4 divide-y divide-slate-100 flex-1">
+            {(overview.recentOrders || []).length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">Chưa có đơn đặt hàng Online nào.</div>
+            ) : (
+              overview.recentOrders.map((ord) => (
+                <div key={ord.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-blue-600">#{ord.orderNumber}</span>
+                      <span className="text-xs font-bold text-slate-800">{ord.receiverName}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate max-w-[230px] mt-0.5">
+                      {ord.shippingAddress}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-xs font-black text-slate-900">
+                      {Number(ord.totalAmount || 0).toLocaleString('vi-VN')} ₫
+                    </p>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold mt-0.5 ${
+                      ord.status === 'PENDING' ? 'text-amber-600' :
+                      ord.status === 'COMPLETED' ? 'text-emerald-600' : 'text-blue-600'
+                    }`}>
+                      {ord.status === 'PENDING' ? <Clock className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                      {ord.status}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
-};
-
+}
 export default DashboardPage;

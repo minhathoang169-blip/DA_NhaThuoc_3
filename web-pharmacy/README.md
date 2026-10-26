@@ -70,3 +70,16 @@ Giao diện có form đăng nhập; `apiAuth.js` thử GET `/api/customers` vớ
 - Người dùng báo một số API đã trả JSON; điều đó chưa xác nhận Frontend hoạt động end-to-end.
 
 Xem [README tổng quan](../README.md) và [README Backend](../pharmacy-backend/README.md) để chạy toàn bộ dự án.
+
+---
+
+## 🔑 Tài Khoản Đăng Nhập Hệ Thống (`QuanLyNhaThuocDB`)
+
+Dưới đây là danh sách các tài khoản có sẵn trong bảng `users` của cơ sở dữ liệu `QuanLyNhaThuocDB`:
+
+| STT | Vai trò (Role) | Tài khoản (`username`) | Mật khẩu (`password`) | Họ và tên (`fullName`) | Quyền truy cập |
+| :-- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **`ADMIN`** | `admin` | `admin123` | DS. CKII Lê Hoàng Nam | Toàn quyền: Bán hàng POS, Báo cáo vận hành, Danh mục thuốc & hoạt chất, Quản lý lô FEFO, Đơn hàng Online, Danh mục hệ thống (NV/KH/NCC) |
+| **2** | **`PHARMACIST`** | `pharmacist` | `pharmacist123` | DS. Trần Minh Anh | Dược sĩ quầy: Bán hàng POS, Danh mục thuốc, Quản lý lô FEFO, Đơn hàng Online |
+| **3** | **`CUSTOMER`** | `customer` | `customer123` | Nguyễn Hoàng Long | Tài khoản khách hàng (Mobile App / Đặt đơn trực tuyến) |
+

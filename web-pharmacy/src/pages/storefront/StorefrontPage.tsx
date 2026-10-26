@@ -68,6 +68,7 @@ export const StorefrontPage: React.FC<{
       // Invalidate cache toàn hệ thống: Tồn kho tự trừ, đơn hàng gửi sang Admin
       invalidateOrdersCache();
       setCart([]);
+      setIsCartOpen(false);
       setCheckoutSuccess(data);
       setCheckoutError('');
     },
@@ -197,6 +198,8 @@ export const StorefrontPage: React.FC<{
               border: 'none',
               fontSize: 14,
               outline: 'none',
+              color: '#0f172a',
+              background: '#ffffff',
               boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
             }}
           />
@@ -345,7 +348,7 @@ export const StorefrontPage: React.FC<{
                   {currency.format(med.price)}
                 </div>
 
-                {/* NÚT THÊM VÀO GIỎ: Vô hiệu hóa ngay khi Admin chuyển trạng thái hết hàng */}
+                {/* NÚT THÊM VÀO GIỎ */}
                 <button
                   type="button"
                   disabled={isOutOfStock}
@@ -363,7 +366,7 @@ export const StorefrontPage: React.FC<{
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  {isOutOfStock ? 'Tạm Hết Hàng (Disabled)' : '🛒 Thêm Vào Giỏ'}
+                  {isOutOfStock ? 'Tạm Hết Hàng' : '🛒 Thêm Vào Giỏ'}
                 </button>
               </div>
             </div>
@@ -402,13 +405,33 @@ export const StorefrontPage: React.FC<{
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
                 Giỏ Hàng Mua Sắm ({cart.reduce((s, i) => s + i.quantity, 0)})
               </h2>
-              <button
-                type="button"
-                onClick={() => setIsCartOpen(false)}
-                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCart([])}
+                    style={{
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      border: '1px solid #fecaca',
+                      borderRadius: 8,
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Xóa tất cả
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCartOpen(false)}
+                  style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Cart Items List */}
@@ -471,7 +494,7 @@ export const StorefrontPage: React.FC<{
               {cart.length > 0 && (
                 <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px dashed #cbd5e1' }}>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12 }}>
-                    Thông Tin Nhận Hàng (Không Yêu Cầu Đăng Nhập)
+                    Thông Tin Nhận Hàng
                   </h3>
 
                   {checkoutError && (
@@ -588,7 +611,7 @@ export const StorefrontPage: React.FC<{
               Đặt Hàng Thành Công!
             </h2>
             <p style={{ color: '#475569', fontSize: 14, lineHeight: 1.6, margin: '0 0 20px' }}>
-              Cảm ơn bạn đã đặt thuốc tại Dược An. Đơn hàng đã được lưu và trừ kho thời gian thực theo thuật toán FEFO.
+              Cảm ơn bạn đã đặt thuốc tại Dược An. Đơn hàng đã được ghi nhận ở trạng thái <strong>Chờ xác nhận (PENDING)</strong> và giữ chỗ kho theo thuật toán FEFO.
             </p>
 
             <div style={{ background: '#f0fdfa', border: '1.5px dashed #0f766e', borderRadius: 12, padding: 16, marginBottom: 20 }}>

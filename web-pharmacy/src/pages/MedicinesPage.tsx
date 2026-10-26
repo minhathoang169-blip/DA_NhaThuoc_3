@@ -1,753 +1,503 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { MedicineItem } from '../types/pharmacy';
+import { invalidateMedicinesCache } from '../services/queryClient';
+import { MedicineInventoryItem, MedicineRequest, MedicineResponse } from '../types/pharmacy';
+import { 
+  Search, Plus, Layers, AlertTriangle, CheckCircle2, 
+  Package, RefreshCw, X, Save, Edit3, Trash2, ArrowRight, ShieldAlert
+} from 'lucide-react';
 
-const currency = new Intl.NumberFormat('vi-VN', {
-  style: 'currency',
-  currency: 'VND',
-  maximumFractionDigits: 0,
-});
+const PAGE_SIZE = 10;
 
-export const MedicinesPage: React.FC = () => {
-  const [search, setSearch] = useState('');
+export function MedicinesPage() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [selectedType, setSelectedType] = useState<'ALL' | 'RX' | 'OTC' | 'TPCN'>('ALL');
-  const [quickFilter, setQuickFilter] = useState<'ALL' | 'EXPIRING' | 'LOW_STOCK' | 'PROMO' | 'HIGH_STOCK'>('ALL');
-  const [pageSize, setPageSize] = useState<number>(25);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // 1. Fetch danh sách thuốc từ CSDL SQL Server thật qua API
-  const { data: medicines = [], isLoading, refetch } = useQuery<MedicineItem[]>({
-    queryKey: ['medicinesCatalogReal', search],
+  // Modal State for Create / Edit Medicine in SanPham table (/api/medicines)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [formData, setFormData] = useState<MedicineRequest>({
+    id: '',
+    name: '',
+    category: '',
+    price: 0,
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionBanner, setActionBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Fetch Medicines with Inventory aggregation (/api/v1/medicines/search)
+  const { data: medicines = [], isLoading, isError, refetch } = useQuery<MedicineInventoryItem[]>({
+    queryKey: ['medicines-catalog'],
     queryFn: async () => {
-      const url = search.trim()
-        ? `/v1/medicines/search?q=${encodeURIComponent(search.trim())}`
-        : `/v1/medicines/search`;
-      const res = await api.get(url);
-      return res.data;
+      const response = await api.get('/v1/medicines/search?q=');
+      return Array.isArray(response.data) ? response.data : [];
     },
   });
 
-  // 2. Thống kê số liệu nghiệp vụ từ dữ liệu CSDL thật
+  // Create Medicine Mutation (POST /api/medicines -> SanPham table)
+  const createMutation = useMutation({
+    mutationFn: async (payload: MedicineRequest) => {
+      const response = await api.post<MedicineResponse>('/medicines', payload);
+      return response.data;
+    },
+    onSuccess: (created) => {
+      invalidateMedicinesCache(queryClient);
+      setIsModalOpen(false);
+      setActionBanner({
+        type: 'success',
+        text: `Đã thêm sản phẩm "${created.name}" (${created.id}) vào bảng SanPham thành công!`,
+      });
+    },
+    onError: (err: any) => {
+      setFormError(err.response?.data?.message || 'Không thể thêm sản phẩm mới. Vui lòng kiểm tra dữ liệu!');
+    },
+  });
+
+  // Update Medicine Mutation (PUT /api/medicines/{id} -> SanPham table)
+  const updateMutation = useMutation({
+    mutationFn: async (payload: MedicineRequest) => {
+      const response = await api.put<MedicineResponse>(`/medicines/${encodeURIComponent(payload.id)}`, payload);
+      return response.data;
+    },
+    onSuccess: (updated) => {
+      invalidateMedicinesCache(queryClient);
+      setIsModalOpen(false);
+      setActionBanner({
+        type: 'success',
+        text: `Đã cập nhật sản phẩm "${updated.name}" (${updated.id}) trong bảng SanPham!`,
+      });
+    },
+    onError: (err: any) => {
+      setFormError(err.response?.data?.message || 'Không thể cập nhật sản phẩm.');
+    },
+  });
+
+  // Delete Medicine Mutation (DELETE /api/medicines/{id} -> SanPham table)
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/medicines/${encodeURIComponent(id)}`);
+      return id;
+    },
+    onSuccess: (deletedId) => {
+      invalidateMedicinesCache(queryClient);
+      setDeleteConfirmId(null);
+      setActionBanner({
+        type: 'success',
+        text: `Đã xóa sản phẩm mã "${deletedId}" khỏi bảng SanPham!`,
+      });
+    },
+    onError: (err: any) => {
+      setDeleteConfirmId(null);
+      setActionBanner({
+        type: 'error',
+        text: err.response?.data?.message || 'Không thể xóa sản phẩm (có thể sản phẩm đang có lô thuốc trong bảng LoThuoc).',
+      });
+    },
+  });
+
+  // Distinct Categories from DB
   const categories = useMemo(() => {
-    return Array.from(new Set(medicines.map((m) => m.category))).filter(Boolean);
+    return Array.from(
+      new Set(medicines.map((m) => m.category).filter((c): c is string => Boolean(c && c.trim())))
+    );
   }, [medicines]);
 
-  const rxMedicines = useMemo(() => {
-    return medicines.filter((m) => {
-      const cat = (m.category || '').toLowerCase();
-      const name = (m.name || '').toLowerCase();
-      return cat.includes('kháng sinh') || cat.includes('huyết áp') || cat.includes('tim mạch') || name.includes('augmentin') || name.includes('amlor') || name.includes('klamentin');
-    });
-  }, [medicines]);
-
-  const otcMedicines = useMemo(() => {
-    return medicines.filter((m) => !rxMedicines.some((rx) => rx.id === m.id));
-  }, [medicines, rxMedicines]);
-
-  const lowStockMedicines = useMemo(() => {
-    return medicines.filter((m) => m.totalStock < 25);
-  }, [medicines]);
-
-  // Bộ lọc dữ liệu theo Category, Type và QuickFilter
+  // Filtered Medicines (Safely guarding null/undefined fields)
   const filteredMedicines = useMemo(() => {
-    return medicines.filter((m) => {
-      // Lọc danh mục
-      if (selectedCategory !== 'ALL' && m.category !== selectedCategory) {
-        return false;
-      }
+    const kw = searchKeyword.trim().toLowerCase();
+    return medicines.filter((item) => {
+      const idStr = String(item.id || '').toLowerCase();
+      const nameStr = String(item.name || '').toLowerCase();
+      const catStr = String(item.category || '').toLowerCase();
+      const activeIng = String(item.activeIngredientName || '').toLowerCase();
 
-      const isRx = rxMedicines.some((rx) => rx.id === m.id);
-      const isTpcn = (m.category || '').toLowerCase().includes('thảo dược') || (m.name || '').toLowerCase().includes('berocca') || (m.name || '').toLowerCase().includes('sinh lý');
-
-      // Lọc theo phân loại Rx / OTC / TPCN
-      if (selectedType === 'RX' && !isRx) return false;
-      if (selectedType === 'TPCN' && !isTpcn) return false;
-      if (selectedType === 'OTC' && (isRx || isTpcn)) return false;
-
-      // Quick filter
-      if (quickFilter === 'LOW_STOCK' && m.totalStock >= 20) return false;
-      if (quickFilter === 'HIGH_STOCK' && m.totalStock < 100) return false;
-      if (quickFilter === 'EXPIRING') {
-        if (!m.nearestExpiry) return false;
-        const diff = (new Date(m.nearestExpiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-        if (diff > 180) return false;
-      }
-
-      return true;
+      const matchSearch =
+        !kw ||
+        nameStr.includes(kw) ||
+        idStr.includes(kw) ||
+        catStr.includes(kw) ||
+        activeIng.includes(kw);
+      const matchCat = selectedCategory === 'ALL' || item.category === selectedCategory;
+      return matchSearch && matchCat;
     });
-  }, [medicines, selectedCategory, selectedType, quickFilter, rxMedicines]);
+  }, [medicines, searchKeyword, selectedCategory]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredMedicines.length / PAGE_SIZE));
+  const paginatedMedicines = useMemo(() => {
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredMedicines.slice(start, start + PAGE_SIZE);
+  }, [filteredMedicines, currentPage, totalPages]);
+
+  // Real Summary Metrics from Database
+  const totalStockUnits = useMemo(
+    () => medicines.reduce((acc, m) => acc + Number(m.totalStock ?? m.stock ?? 0), 0),
+    [medicines]
+  );
+  const lowOrOutStockCount = useMemo(
+    () => medicines.filter((m) => Number(m.totalStock ?? m.stock ?? 0) < 100).length,
+    [medicines]
+  );
+
+  // Open Create Modal
+  const handleOpenCreate = () => {
+    const nextNum = medicines.length + 1;
+    const suggestedId = `SP${String(nextNum).padStart(3, '0')}`;
+    setModalMode('create');
+    setFormData({
+      id: suggestedId,
+      name: '',
+      category: categories[0] || 'Thuốc giảm đau',
+      price: 0,
+    });
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (med: MedicineInventoryItem) => {
+    setModalMode('edit');
+    setFormData({
+      id: med.id,
+      name: med.name || '',
+      category: med.category || '',
+      price: Number(med.price ?? 0),
+    });
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  // Submit Create or Edit
+  const handleSubmitForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const trimmedId = formData.id.trim();
+    const trimmedName = formData.name.trim();
+    const trimmedCat = formData.category.trim();
+
+    if (!trimmedId || trimmedId.length > 50) {
+      setFormError('Mã sản phẩm (MaSanPham) không được để trống và tối đa 50 ký tự.');
+      return;
+    }
+    if (!trimmedName || trimmedName.length > 255) {
+      setFormError('Tên sản phẩm (TenSanPham) không được để trống và tối đa 255 ký tự.');
+      return;
+    }
+    if (!trimmedCat || trimmedCat.length > 20) {
+      setFormError('Loại sản phẩm (LoaiSanPham) không được để trống và tối đa 20 ký tự (theo cấu trúc bảng SanPham).');
+      return;
+    }
+    if (formData.price < 0 || isNaN(formData.price)) {
+      setFormError('Giá bán (GiaBan) phải lớn hơn hoặc bằng 0.');
+      return;
+    }
+
+    const payload: MedicineRequest = {
+      id: trimmedId,
+      name: trimmedName,
+      category: trimmedCat,
+      price: Number(formData.price),
+    };
+
+    if (modalMode === 'create') {
+      createMutation.mutate(payload);
+    } else {
+      updateMutation.mutate(payload);
+    }
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       
-      {/* ========================================================
-          1. HEADER BAR & ACTION BUTTONS
-          ======================================================== */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#0f766e', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>✓</span>
-            <span>CHUẨN HÓA DƯỢC LÝ GPP • QUYẾT ĐỊNH BỘ Y TẾ</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                Danh Mục Sản Phẩm Thuốc (Bảng SanPham)
+              </h1>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Quản lý trực tiếp dữ liệu bảng <code className="font-mono text-slate-700">SanPham</code> và tổng hợp tồn kho thực tế từ bảng <code className="font-mono text-slate-700">LoThuoc</code>
+              </p>
+            </div>
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '4px 0 2px', letterSpacing: '-0.02em' }}>
-            Danh Mục Thuốc & Hoạt Chất Điều Trị
-          </h1>
-          <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
-            Quản lý thông tin dược phẩm, hoạt chất gốc, mã vạch Barcode, phân nhóm điều trị và tổng tồn kho khả dụng theo tiêu chuẩn FEFO.
-          </p>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => alert('Đang tạo lệnh in tem mã vạch Barcode chuẩn Code 128 cho các mặt hàng được chọn...')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-              color: '#334155',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s'
-            }}
+        <div className="flex items-center gap-2.5">
+          <button 
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
           >
-            <span>🏷️</span>
-            <span>In mã vạch Barcode</span>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+            Đồng bộ CSDL
           </button>
-
-          <button
-            type="button"
-            onClick={() => alert('Mở giao diện nhập danh mục thuốc chuẩn Bộ Y Tế từ tập tin Excel (.xlsx)...')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-              color: '#334155',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s'
-            }}
+          <button 
+            onClick={() => navigate('/batches')}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
           >
-            <span>📊</span>
-            <span>Nhập danh mục Excel</span>
+            <Layers className="w-4 h-4" />
+            Quản lý Lô Thuốc (LoThuoc)
           </button>
-
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 18px',
-              borderRadius: 10,
-              border: 'none',
-              background: '#0a4d44',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(10, 77, 68, 0.3)'
-            }}
+          <button 
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
           >
-            <span>➕</span>
-            <span>Thêm Thuốc Mới (F4)</span>
+            <Plus className="w-4 h-4" />
+            Thêm Sản Phẩm Mới
           </button>
         </div>
       </div>
 
-      {/* ========================================================
-          2. 4 THẺ CHỈ SỐ HOẠT CHẤT & KHO
-          ======================================================== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
-        
-        {/* Card 1: Tổng Hoạt Chất */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #e2e8f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-              TỔNG HOẠT CHẤT KHẢ DỤNG
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
-              {medicines.length > 0 ? (medicines.length * 98 + 12) : 1482}
-            </div>
-            <div style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>
-              99.2% Đã chuẩn hóa INN
-            </div>
+      {/* Feedback Banner */}
+      {actionBanner && (
+        <div
+          className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold ${
+            actionBanner.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionBanner.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <ShieldAlert className="w-4 h-4 text-rose-600" />
+            )}
+            <span>{actionBanner.text}</span>
           </div>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: '#f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            color: '#6366f1'
-          }}>
-            🧪
+          <button onClick={() => setActionBanner(null)} className="text-slate-400 hover:text-slate-700">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Real Database Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tổng Sản Phẩm (SanPham)</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{medicines.length} <span className="text-xs font-semibold text-slate-500">mặt hàng</span></p>
+            <p className="text-[11px] text-emerald-600 font-semibold mt-1">Đang lưu trong QuanLyNhaThuocDB</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Package className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Card 2: Thuốc Kê Đơn Rx */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #fee2e2',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#991b1b', textTransform: 'uppercase' }}>
-              THUỐC KÊ ĐƠN (RX)
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#b91c1c', margin: '4px 0 2px' }}>
-              {rxMedicines.length > 0 ? (rxMedicines.length * 104) : 624}
-            </div>
-            <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>
-              Quản lý bán theo đơn bác sĩ
-            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tổng Tồn Kho Khả Dụng</p>
+            <p className="text-2xl font-black text-indigo-600 mt-1">
+              {totalStockUnits.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-slate-500">đơn vị</span>
+            </p>
+            <p className="text-[11px] text-indigo-600 font-semibold mt-1">Tổng hợp từ các lô còn hạn (LoThuoc)</p>
           </div>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: '#fef2f2',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            color: '#ef4444'
-          }}>
-            📋
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <Layers className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Card 3: Thuốc OTC & TPCN */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #dcfce7',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
-              THUỐC OTC & TPCN
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#15803d', margin: '4px 0 2px' }}>
-              {otcMedicines.length > 0 ? (otcMedicines.length * 95 + 8) : 858}
-            </div>
-            <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-              Bán lẻ không cần đơn
-            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nhóm / Loại Sản Phẩm</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">{categories.length} <span className="text-xs font-semibold text-slate-500">nhóm</span></p>
+            <p className="text-[11px] text-emerald-600 font-semibold mt-1 truncate max-w-[180px]">
+              {categories.join(', ') || 'Chưa phân loại'}
+            </p>
           </div>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: '#f0fdf4',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            color: '#22c55e'
-          }}>
-            🛍️
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Card 4: Cảnh Báo Tồn Kho & Hạn Dùng */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #fed7aa',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#9a3412', textTransform: 'uppercase' }}>
-              CẢNH BÁO TỒN KHO & HẠN DÙNG
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#c2410c', margin: '4px 0 2px' }}>
-              {lowStockMedicines.length > 0 ? (lowStockMedicines.length + 15) : 19}
-            </div>
-            <div style={{ fontSize: 11, color: '#ea580c', fontWeight: 600 }}>
-              12 chạm ngưỡng, 7 cận hạn FEFO
-            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sắp Hết / Hết Tồn (&lt; 100)</p>
+            <p className="text-2xl font-black text-amber-600 mt-1">{lowOrOutStockCount} <span className="text-xs font-semibold text-slate-500">sản phẩm</span></p>
+            <p className="text-[11px] text-amber-600 font-semibold mt-1">Cần kiểm tra nhập thêm lô mới</p>
           </div>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: '#fff7ed',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            color: '#f97316'
-          }}>
-            📅
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6" />
           </div>
         </div>
       </div>
 
-      {/* ========================================================
-          3. KHỐI TÌM KIẾM & BỘ LỌC ĐA CHIỀU
-          ======================================================== */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 14,
-        padding: '14px 18px',
-        border: '1px solid #e2e8f0',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-      }}>
-        
-        {/* Hàng 1: Ô tìm kiếm + 2 Dropdown Lọc */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          
-          {/* Ô Tìm Kiếm */}
-          <div style={{
-            flex: '1 1 380px',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <span style={{ position: 'absolute', left: 14, color: '#94a3b8', fontSize: 14 }}>🔍</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm thuốc theo tên biệt dược, mã vạch..."
-              style={{
-                width: '100%',
-                padding: '9px 70px 9px 38px',
-                borderRadius: 9,
-                border: '1px solid #cbd5e1',
-                fontSize: 13,
-                outline: 'none',
-                background: '#f8fafc'
-              }}
-            />
-            <div style={{ position: 'absolute', right: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, background: '#e2e8f0', color: '#475569', padding: '1px 5px', borderRadius: 4 }}>
-                F3
-              </span>
-              <span style={{ fontSize: 14, color: '#64748b', cursor: 'pointer' }}>📷</span>
-            </div>
-          </div>
-
-          {/* Dropdown Nhóm Tác Dụng */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            style={{
-              padding: '9px 14px',
-              borderRadius: 9,
-              border: '1px solid #cbd5e1',
-              fontSize: 12.5,
-              fontWeight: 700,
-              color: '#334155',
-              background: '#ffffff',
-              outline: 'none',
-              cursor: 'pointer'
+      {/* Filter & Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full md:w-96">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchKeyword}
+            onChange={(e) => {
+              setSearchKeyword(e.target.value);
+              setCurrentPage(1);
             }}
-          >
-            <option value="ALL">Tất cả nhóm tác dụng điều trị</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          {/* Dropdown Phân Loại Rx / OTC / TPCN */}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value as any)}
-            style={{
-              padding: '9px 14px',
-              borderRadius: 9,
-              border: '1px solid #cbd5e1',
-              fontSize: 12.5,
-              fontWeight: 700,
-              color: '#334155',
-              background: '#ffffff',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="ALL">Tất cả phân loại (Rx / OTC / TPCN)</option>
-            <option value="RX">Thuốc kê đơn (Rx)</option>
-            <option value="OTC">Thuốc không kê đơn (OTC)</option>
-            <option value="TPCN">Thực phẩm chức năng (TPCN)</option>
-          </select>
+            placeholder="Tìm theo Mã SP (SP001), Tên sản phẩm, Loại sản phẩm..."
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
         </div>
 
-        {/* Hàng 2: Bộ lọc nhanh Pills */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700 }}>Bộ lọc nhanh:</span>
-            
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+          <button
+            onClick={() => {
+              setSelectedCategory('ALL');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              selectedCategory === 'ALL'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Tất cả ({medicines.length})
+          </button>
+          {categories.map((cat) => (
             <button
-              type="button"
-              onClick={() => setQuickFilter('ALL')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: 'none',
-                background: quickFilter === 'ALL' ? '#064e3b' : '#f1f5f9',
-                color: quickFilter === 'ALL' ? '#ffffff' : '#475569',
-                fontSize: 12,
-                fontWeight: 800,
-                cursor: 'pointer'
+              key={cat}
+              onClick={() => {
+                setSelectedCategory(cat);
+                setCurrentPage(1);
               }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === cat
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              Tất cả ({medicines.length > 0 ? (medicines.length * 98 + 12) : 1482})
+              {cat} ({medicines.filter((m) => m.category === cat).length})
             </button>
-
-            <button
-              type="button"
-              onClick={() => setQuickFilter('EXPIRING')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: quickFilter === 'EXPIRING' ? '1px solid #f59e0b' : '1px solid #e2e8f0',
-                background: quickFilter === 'EXPIRING' ? '#fffbeb' : '#ffffff',
-                color: quickFilter === 'EXPIRING' ? '#b45309' : '#64748b',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Cận hạn (&lt; 90 ngày)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setQuickFilter('LOW_STOCK')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: quickFilter === 'LOW_STOCK' ? '1px solid #ef4444' : '1px solid #e2e8f0',
-                background: quickFilter === 'LOW_STOCK' ? '#fef2f2' : '#ffffff',
-                color: quickFilter === 'LOW_STOCK' ? '#b91c1c' : '#64748b',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Sắp hết hàng (&lt; 10 hộp)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setQuickFilter('PROMO')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: quickFilter === 'PROMO' ? '1px solid #8b5cf6' : '1px solid #e2e8f0',
-                background: quickFilter === 'PROMO' ? '#f5f3ff' : '#ffffff',
-                color: quickFilter === 'PROMO' ? '#6d28d9' : '#64748b',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Đang khuyến mãi
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setQuickFilter('HIGH_STOCK')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: quickFilter === 'HIGH_STOCK' ? '1px solid #10b981' : '1px solid #e2e8f0',
-                background: quickFilter === 'HIGH_STOCK' ? '#ecfdf5' : '#ffffff',
-                color: quickFilter === 'HIGH_STOCK' ? '#047857' : '#64748b',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Tồn kho nhiều (&gt; 200)
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>
-            <span>Hiển thị {filteredMedicines.length} / {medicines.length > 0 ? (medicines.length * 98 + 12) : 1482} sản phẩm</span>
-            <span
-              onClick={() => refetch()}
-              title="Làm mới"
-              style={{ cursor: 'pointer', fontSize: 13, color: '#0f766e' }}
-            >
-              🔄
-            </span>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* ========================================================
-          4. BẢNG DANH MỤC THUỐC 7 CỘT CHUẨN MỰC
-          ======================================================== */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 14,
-        border: '1px solid #e2e8f0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
-            <thead style={{
-              background: '#f8fafc',
-              borderBottom: '1px solid #e2e8f0',
-              color: '#64748b',
-              fontWeight: 800,
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase'
-            }}>
-              <tr>
-                <th style={{ padding: '12px 16px' }}>MÃ THUỐC & BARCODE</th>
-                <th style={{ padding: '12px 16px' }}>TÊN BIỆT DƯỢC & QUY CÁCH</th>
-                <th style={{ padding: '12px 14px' }}>HOẠT CHẤT CHÍNH & HÀM LƯỢNG</th>
-                <th style={{ padding: '12px 14px' }}>NHÓM TÁC DỤNG</th>
-                <th style={{ padding: '12px 12px', textAlign: 'center' }}>PHÂN LOẠI</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>ĐƠN GIÁ BÁN</th>
-                <th style={{ padding: '12px 18px', textAlign: 'right' }}>TỔNG TỒN KHO KHẢ DỤNG</th>
+      {/* Main Catalog Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4">Mã SP (MaSanPham)</th>
+                <th className="py-3.5 px-4">Tên Sản Phẩm (TenSanPham)</th>
+                <th className="py-3.5 px-4">Loại Sản Phẩm (LoaiSanPham)</th>
+                <th className="py-3.5 px-4 text-right">Giá Bán Lẻ (GiaBan)</th>
+                <th className="py-3.5 px-4 text-center">Tổng Tồn Khả Dụng</th>
+                <th className="py-3.5 px-4">Hạn SD Gần Nhất (FEFO)</th>
+                <th className="py-3.5 px-4 text-right">Thao tác CRUD</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-200/60 text-sm">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
-                    Đang đồng bộ danh mục dược phẩm từ CSDL SQL Server...
+                  <td colSpan={7} className="p-12 text-center text-slate-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    Đang tải danh mục sản phẩm từ SQL Server...
                   </td>
                 </tr>
-              ) : filteredMedicines.length === 0 ? (
+              ) : isError ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
-                    Không tìm thấy sản phẩm nào khớp với điều kiện lọc.
+                  <td colSpan={7} className="p-12 text-center text-rose-600 font-semibold">
+                    Không thể tải dữ liệu từ API (/api/v1/medicines/search). Vui lòng kiểm tra kết nối Backend!
+                  </td>
+                </tr>
+              ) : paginatedMedicines.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-12 text-center text-slate-500">
+                    Không tìm thấy sản phẩm nào khớp với bộ lọc hiện tại.
                   </td>
                 </tr>
               ) : (
-                filteredMedicines.map((m) => {
-                  const isRx = rxMedicines.some((rx) => rx.id === m.id);
-                  const isTpcn = (m.category || '').toLowerCase().includes('thảo dược') || (m.name || '').toLowerCase().includes('berocca') || (m.name || '').toLowerCase().includes('sinh lý');
-                  
-                  // Quy cách & Hãng sản xuất
-                  const nameParts = m.name.split('(');
-                  const brandName = nameParts[0].trim();
-                  const packInfo = nameParts[1] ? nameParts[1].replace(')', '') : 'Hộp tiêu chuẩn 10 vỉ';
-
-                  // Hãng sản xuất suy luận theo thuốc
-                  let manufacturer = 'United International Pharma (VN)';
-                  if (m.name.toLowerCase().includes('augmentin')) manufacturer = 'GlaxoSmithKline (GSK - Anh Quốc)';
-                  else if (m.name.toLowerCase().includes('berberin')) manufacturer = 'Dược phẩm Bắc Ninh (BANIPHAR)';
-                  else if (m.name.toLowerCase().includes('berocca')) manufacturer = 'Bayer Consumer Care (Thụy Sĩ / Indonesia)';
-                  else if (m.name.toLowerCase().includes('amlor')) manufacturer = 'Pfizer (Pháp / Hoa Kỳ)';
-                  else if (m.name.toLowerCase().includes('acetylcystein')) manufacturer = 'Pymepharco (STADA Group VN)';
-                  else if (m.name.toLowerCase().includes('hapacol')) manufacturer = 'Dược Hậu Giang (DHG Pharma)';
-                  else if (m.name.toLowerCase().includes('panadol')) manufacturer = 'GSK Consumer Healthcare';
-
-                  // Tình trạng tồn kho
-                  let stockStatusText = 'An toàn';
-                  let stockStatusColor = '#059669';
-                  let stockStatusBg = '#ecfdf5';
-
-                  if (m.totalStock <= 0) {
-                    stockStatusText = 'Hết hàng';
-                    stockStatusColor = '#dc2626';
-                    stockStatusBg = '#fef2f2';
-                  } else if (m.totalStock < 20) {
-                    stockStatusText = 'Cần nhập thêm';
-                    stockStatusColor = '#d97706';
-                    stockStatusBg = '#fffbeb';
-                  } else if (m.totalStock < 60) {
-                    stockStatusText = 'Đủ cơ số';
-                    stockStatusColor = '#0d9488';
-                    stockStatusBg = '#f0fdfa';
-                  } else if (m.nearestExpiry && m.nearestExpiry.includes('2026-11')) {
-                    stockStatusText = 'Cận hạn lô';
-                    stockStatusColor = '#ea580c';
-                    stockStatusBg = '#fff7ed';
-                  }
-
-                  const unitPriceCalculated = Math.round(m.price / 100);
+                paginatedMedicines.map((med) => {
+                  const stockVal = Number(med.totalStock ?? med.stock ?? 0);
+                  const priceVal = Number(med.price ?? 0);
+                  const batchCount = Array.isArray(med.batches) ? med.batches.length : 0;
 
                   return (
-                    <tr
-                      key={m.id}
-                      style={{
-                        borderBottom: '1px solid #f1f5f9',
-                        transition: 'background 0.12s'
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
-                    >
-                      {/* Cột 1: Mã thuốc & Barcode */}
-                      <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{
-                            background: '#042f2e',
-                            color: '#ffffff',
-                            fontSize: 11,
-                            fontWeight: 800,
-                            padding: '2px 6px',
-                            borderRadius: 5,
-                            letterSpacing: '0.02em'
-                          }}>
-                            {m.id}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span>|||</span>
-                          <span>{m.barcode || 'Chưa có mã vạch'}</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
-                          SĐK: VD-{m.barcode ? m.barcode.slice(-5) : '24890'}-16
-                        </div>
-                      </td>
-
-                      {/* Cột 2: Tên biệt dược & Quy cách */}
-                      <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, color: '#0f172a', fontSize: 13.5 }}>
-                            {brandName}
-                          </span>
-                          {isRx && (
-                            <span style={{
-                              fontSize: 9.5,
-                              fontWeight: 800,
-                              background: '#fee2e2',
-                              color: '#dc2626',
-                              padding: '1px 5px',
-                              borderRadius: 4,
-                              border: '1px solid #fca5a5'
-                            }}>
-                              Kê Đơn
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
-                          {packInfo}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ width: 3, height: 10, background: '#10b981', display: 'inline-block', borderRadius: 2 }} />
-                          <span>Hãng: {manufacturer}</span>
-                        </div>
-                      </td>
-
-                      {/* Cột 3: Hoạt chất & Hàm lượng */}
-                      <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        <div style={{
-                          background: '#f1f5f9',
-                          padding: '4px 8px',
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: '#334155',
-                          display: 'inline-block',
-                          maxWidth: 220
-                        }}>
-                          {m.activeIngredientName || 'Chưa cập nhật hoạt chất'}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>
-                          {isRx ? 'Tác dụng kháng khuẩn / ức chế enzym' : 'Tác dụng giảm triệu chứng toàn thân'}
-                        </div>
-                      </td>
-
-                      {/* Cột 4: Nhóm tác dụng */}
-                      <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 700, color: '#334155', fontSize: 12 }}>
-                          {m.category}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
-                          {m.category.includes('giảm đau') ? 'Hệ cơ xương khớp' : m.category.includes('dạ dày') ? 'Hệ tiêu hóa' : 'Hệ hô hấp & miễn dịch'}
-                        </div>
-                      </td>
-
-                      {/* Cột 5: Phân loại badge */}
-                      <td style={{ padding: '12px 12px', textAlign: 'center', verticalAlign: 'top' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          background: isRx ? '#fee2e2' : isTpcn ? '#fffbeb' : '#ecfdf5',
-                          color: isRx ? '#b91c1c' : isTpcn ? '#b45309' : '#047857',
-                          border: isRx ? '1px solid #fecaca' : isTpcn ? '1px solid #fde68a' : '1px solid #a7f3d0'
-                        }}>
-                          {isRx ? 'Rx' : isTpcn ? 'TPCN' : 'OTC'}
+                    <tr key={med.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                          {med.id}
                         </span>
                       </td>
-
-                      {/* Cột 6: Đơn giá bán */}
-                      <td style={{ padding: '12px 16px', textAlign: 'right', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 900, color: '#042f2e', fontSize: 14 }}>
-                          {currency.format(m.price)}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 1 }}>
-                          {unitPriceCalculated > 0 ? `${unitPriceCalculated.toLocaleString('vi-VN')} đ/viên` : 'Giá sỉ'}
-                        </div>
+                      <td className="py-3.5 px-4">
+                        <p className="font-bold text-slate-900 text-sm">{med.name}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {med.activeIngredientName
+                            ? `Hoạt chất: ${med.activeIngredientName}`
+                            : batchCount > 0
+                            ? `Đang có ${batchCount} lô khả dụng`
+                            : 'Chưa có lô khả dụng'}
+                        </p>
                       </td>
-
-                      {/* Cột 7: Tổng tồn kho khả dụng */}
-                      <td style={{ padding: '12px 18px', textAlign: 'right', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                          <span style={{ fontWeight: 900, fontSize: 13, color: '#0f172a' }}>
-                            {m.totalStock} hộp
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          {med.category || 'Chưa phân loại'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="font-black text-slate-900">
+                          {priceVal.toLocaleString('vi-VN')} ₫
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                            stockVal <= 0
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : stockVal < 100
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              stockVal <= 0
+                                ? 'bg-rose-500'
+                                : stockVal < 100
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
+                            }`}
+                          />
+                          {stockVal.toLocaleString('vi-VN')} đv
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {med.nearestExpiry ? (
+                          <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                            {med.nearestExpiry}
                           </span>
-                          <span style={{
-                            fontSize: 10,
-                            fontWeight: 800,
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            background: stockStatusBg,
-                            color: stockStatusColor
-                          }}>
-                            {stockStatusText}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 3 }}>
-                          Tối thiểu: 20 | Đang giữ: 0
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Chưa có lô tồn</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(med)}
+                            title="Sửa thông tin sản phẩm"
+                            className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(med.id)}
+                            title="Xóa sản phẩm"
+                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -757,235 +507,220 @@ export const MedicinesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-        {/* ========================================================
-            5. PHÂN TRANG & THÔNG TIN BẢN QUYỀN GPP
-            ======================================================== */}
-        <div style={{
-          padding: '12px 18px',
-          background: '#f8fafc',
-          borderTop: '1px solid #e2e8f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 12,
-          fontSize: 12,
-          color: '#64748b'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>Hiển thị mỗi trang:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              style={{
-                padding: '4px 8px',
-                borderRadius: 6,
-                border: '1px solid #cbd5e1',
-                fontSize: 12,
-                background: '#ffffff',
-                outline: 'none'
-              }}
-            >
-              <option value={10}>10 sản phẩm</option>
-              <option value={25}>25 sản phẩm</option>
-              <option value={50}>50 sản phẩm</option>
-            </select>
-            <span style={{ color: '#cbd5e1' }}>•</span>
-            <span>Bản quyền dược thư GPP • Dữ liệu đồng bộ lúc 14:48:22</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              style={{
-                padding: '4px 8px',
-                borderRadius: 6,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                color: currentPage === 1 ? '#cbd5e1' : '#334155',
-                fontSize: 12
-              }}
-            >
-              |&lt;
-            </button>
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              style={{
-                padding: '4px 8px',
-                borderRadius: 6,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                color: currentPage === 1 ? '#cbd5e1' : '#334155',
-                fontSize: 12
-              }}
-            >
-              &lt;
-            </button>
-
-            <span style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              background: '#042f2e',
-              color: '#ffffff',
-              fontWeight: 800,
-              fontSize: 12
-            }}>
-              1
-            </span>
-            <span style={{ padding: '4px 8px', color: '#64748b', cursor: 'pointer' }}>2</span>
-            <span style={{ padding: '4px 8px', color: '#64748b', cursor: 'pointer' }}>3</span>
-            <span style={{ padding: '4px 4px', color: '#94a3b8' }}>...</span>
-            <span style={{ padding: '4px 8px', color: '#64748b', cursor: 'pointer' }}>60</span>
-
-            <button
-              type="button"
-              style={{
-                padding: '4px 8px',
-                borderRadius: 6,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                cursor: 'pointer',
-                color: '#334155',
-                fontSize: 12
-              }}
-            >
-              &gt;
-            </button>
-            <button
-              type="button"
-              style={{
-                padding: '4px 8px',
-                borderRadius: 6,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                cursor: 'pointer',
-                color: '#334155',
-                fontSize: 12
-              }}
-            >
-              &gt;|
-            </button>
-          </div>
+        
+        {/* Real Pagination Footer */}
+        <div className="p-4 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
+          <span>
+            Hiển thị <strong>{paginatedMedicines.length}</strong> / Tổng số <strong>{filteredMedicines.length}</strong> sản phẩm trong CSDL
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 disabled:opacity-40 cursor-pointer"
+              >
+                Trước
+              </button>
+              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-2.5 py-1 rounded font-bold cursor-pointer ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 disabled:opacity-40 cursor-pointer"
+              >
+                Tiếp
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ========================================================
-          MODAL: THÊM THUỐC MỚI (F4)
-          ======================================================== */}
-      {isAddModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: 20
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: 580,
-            background: '#ffffff',
-            borderRadius: 20,
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
-          }}>
-            <div style={{
-              padding: '18px 24px',
-              background: '#042f2e',
-              color: '#ffffff',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>➕ THÊM THUỐC MỚI VÀO DANH MỤC GPP</h3>
-                <div style={{ fontSize: 11.5, color: '#6ee7b7', marginTop: 2 }}>Đăng ký chuẩn hóa dữ liệu dược quốc gia</div>
+      {/* ===================================================================== */}
+      {/* MODAL CREATE / EDIT MEDICINE (SanPham Table)                          */}
+      {/* ===================================================================== */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Package className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-base">
+                  {modalMode === 'create'
+                    ? 'Thêm Sản Phẩm Mới (Bảng SanPham)'
+                    : `Cập Nhật Sản Phẩm: ${formData.id}`}
+                </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}
-              >
-                ✕
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={handleSubmitForm} className="p-6 space-y-4">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">
+                  {formError}
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                  Tên Biệt Dược *
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mã Sản Phẩm (<code className="font-mono">MaSanPham</code> - Tối đa 50 ký tự) *
                 </label>
                 <input
                   type="text"
-                  placeholder="Ví dụ: Panadol Extra Đỏ (Hộp 180 viên / 15 vỉ)"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                  required
+                  maxLength={50}
+                  disabled={modalMode === 'edit'}
+                  value={formData.id}
+                  onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                  placeholder="VD: SP005"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm font-mono disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tên Sản Phẩm (<code className="font-mono">TenSanPham</code> - Tối đa 255 ký tự) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={255}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="VD: Thuốc hạ sốt Hapacol 650mg"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Mã Vạch Barcode (EAN-13)
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Loại Sản Phẩm (<code className="font-mono">LoaiSanPham</code> &le; 20 ký tự) *
                   </label>
                   <input
                     type="text"
-                    placeholder="8935001800050"
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    required
+                    maxLength={20}
+                    list="existing-categories"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="VD: Thuốc giảm đau"
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500"
                   />
+                  <datalist id="existing-categories">
+                    {categories.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Đã dùng: {formData.category.length}/20 ký tự
+                  </span>
                 </div>
+
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Đơn Giá Bán Lẻ (VNĐ) *
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Giá Bán Lẻ (<code className="font-mono">GiaBan</code> - VNĐ) *
                   </label>
                   <input
                     type="number"
-                    defaultValue={125000}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    required
+                    min={0}
+                    step="any"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    placeholder="VD: 5000"
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm font-bold text-blue-700 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                  Nhóm Tác Dụng Điều Trị *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Giảm đau - Hạ sốt - Kháng viêm"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Hủy
-                </button>
+              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs text-slate-600 flex items-center justify-between">
+                <span>Muốn nhập số lượng tồn kho và hạn sử dụng cho thuốc này?</span>
                 <button
                   type="button"
                   onClick={() => {
-                    alert('Đã lưu thuốc mới vào CSDL Nhà Thuốc thành công!');
-                    setIsAddModalOpen(false);
-                    refetch();
+                    setIsModalOpen(false);
+                    navigate('/batches');
                   }}
-                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#0a4d44', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                  className="text-blue-600 font-bold hover:underline flex items-center gap-1 shrink-0 ml-2"
                 >
-                  Lưu Thuốc (F4)
+                  Tới Quản lý Lô <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-md shadow-blue-600/20 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {createMutation.isPending || updateMutation.isPending
+                    ? 'Đang lưu CSDL...'
+                    : modalMode === 'create'
+                    ? 'Tạo Sản Phẩm'
+                    : 'Lưu Thay Đổi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL CONFIRM DELETE MEDICINE                                         */}
+      {/* ===================================================================== */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Xác nhận xóa sản phẩm</h3>
+                <p className="text-xs text-slate-500">
+                  Mã sản phẩm: <strong className="font-mono text-slate-800">{deleteConfirmId}</strong>
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Bạn có chắc chắn muốn xóa sản phẩm này khỏi bảng <code className="font-mono">SanPham</code>? Nếu sản phẩm đang có lô thuốc tham chiếu trong bảng <code className="font-mono">LoThuoc</code>, hệ thống sẽ từ chối xóa để bảo toàn khóa ngoại.
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteConfirmId)}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 cursor-pointer disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
             </div>
           </div>
         </div>
@@ -993,6 +728,5 @@ export const MedicinesPage: React.FC = () => {
 
     </div>
   );
-};
-
+}
 export default MedicinesPage;

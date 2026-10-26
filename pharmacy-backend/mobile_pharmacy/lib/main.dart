@@ -3,7 +3,9 @@ import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/order_tracking_screen.dart';
 import 'screens/cart_screen.dart';
+import 'screens/account_screen.dart';
 import 'services/cart_manager.dart';
+import 'services/pharmacy_api_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +40,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     HomeScreen(),
     OrderTrackingScreen(),
     CartScreen(),
+    AccountScreen(),
   ];
 
   @override
@@ -48,9 +51,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         children: _pages,
       ),
       bottomNavigationBar: AnimatedBuilder(
-        animation: CartManager(),
+        animation: Listenable.merge([CartManager(), PharmacyApiService()]),
         builder: (context, _) {
           final cartCount = CartManager().totalItemCount;
+          final isLoggedIn = PharmacyApiService().isLoggedIn;
 
           return NavigationBar(
             selectedIndex: _currentIndex,
@@ -81,6 +85,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   child: const Icon(Icons.shopping_bag, color: AppTheme.primary),
                 ),
                 label: 'Giỏ hàng',
+              ),
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: isLoggedIn,
+                  backgroundColor: AppTheme.success,
+                  child: const Icon(Icons.person_outline),
+                ),
+                selectedIcon: const Icon(Icons.person, color: AppTheme.primary),
+                label: 'Tài khoản',
               ),
             ],
           );

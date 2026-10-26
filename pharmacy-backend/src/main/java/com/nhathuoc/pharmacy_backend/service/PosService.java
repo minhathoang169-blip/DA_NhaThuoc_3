@@ -207,7 +207,7 @@ public class PosService {
         order.setShippingAddress(request.getShippingAddress());
         order.setReceiverName(request.getReceiverName());
         order.setReceiverPhone(request.getReceiverPhone());
-        order.setStatus("COMPLETED");
+        order.setStatus("PENDING");
 
         if (customerUser != null) {
             User customer = userRepository.findById(customerUser.getId()).orElse(null);

@@ -25,10 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Map<String, String>> _categories = [
     {'id': 'ALL', 'label': 'Tất cả thuốc', 'icon': '💊'},
-    {'id': 'ANTIBIOTIC', 'label': 'Kháng sinh', 'icon': '🦠'},
-    {'id': 'PAIN', 'label': 'Giảm đau - Hạ sốt', 'icon': '🌡️'},
-    {'id': 'DIGESTIVE', 'label': 'Tiêu hóa - Dạ dày', 'icon': '🩺'},
-    {'id': 'CARDIO', 'label': 'Tim mạch - Huyết áp', 'icon': '❤️'},
+    {'id': 'PAIN', 'label': 'Thuốc giảm đau', 'icon': '🌡️'},
+    {'id': 'ANTIBIOTIC', 'label': 'Thuốc kháng sinh', 'icon': '🦠'},
+    {'id': 'COUGH', 'label': 'Thuốc ho', 'icon': '🍯'},
+    {'id': 'SUPPLEMENT', 'label': 'Thực phẩm chức năng', 'icon': '🍊'},
   ];
 
   @override
@@ -87,13 +87,12 @@ class _HomeScreenState extends State<HomeScreen> {
             m.category.toLowerCase().contains('hạ sốt') ||
             m.category.toLowerCase().contains('kháng viêm');
       }
-      if (_selectedCategory == 'DIGESTIVE') {
-        return m.category.toLowerCase().contains('tiêu hóa') ||
-            m.category.toLowerCase().contains('dạ dày');
+      if (_selectedCategory == 'COUGH') {
+        return m.category.toLowerCase().contains('ho');
       }
-      if (_selectedCategory == 'CARDIO') {
-        return m.category.toLowerCase().contains('tim mạch') ||
-            m.category.toLowerCase().contains('huyết áp');
+      if (_selectedCategory == 'SUPPLEMENT') {
+        return m.category.toLowerCase().contains('thực phẩm chức năng') ||
+            m.category.toLowerCase().contains('vitamin');
       }
       return true;
     }).toList();
@@ -136,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: () => controller.text = 'http://10.0.2.2:8080/api',
                 ),
                 ActionChip(
-                  label: const Text('Localhost (8080)'),
+                  label: const Text('iOS / Localhost (8080)'),
                   onPressed: () => controller.text = 'http://localhost:8080/api',
                 ),
               ],
@@ -245,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
-                              'GIAO THUỐC NHANH 2H',
+                              'ANDROID & IOS • CHUẨN GPP',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
@@ -362,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     if (_allMedicines.isNotEmpty)
                       const Text(
-                        'Dữ liệu CSDL thật',
+                        'Đồng bộ QuanLyNhaThuocDB',
                         style: TextStyle(fontSize: 11, color: AppTheme.success, fontWeight: FontWeight.bold),
                       ),
                   ],
@@ -451,7 +450,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       return MedicineCard(
                         medicine: med,
                         onSubstituteTap: () {
-                          // Xem chi tiết & gợi ý thuốc cùng hoạt chất
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => MedicineDetailScreen(medicine: med),

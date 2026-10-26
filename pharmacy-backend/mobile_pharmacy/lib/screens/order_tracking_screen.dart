@@ -102,7 +102,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           controller: _codeController,
                           textCapitalization: TextCapitalization.characters,
                           decoration: InputDecoration(
-                            hintText: 'Ví dụ: ORD-20261024-XXXX',
+                            hintText: 'Ví dụ: MOB-2024-9981 hoặc ONL-...',
                             prefixIcon: const Icon(Icons.search),
                             suffixIcon: _codeController.text.isNotEmpty
                                 ? IconButton(
@@ -131,6 +131,38 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                               )
                             : const Text('Tra Cứu'),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Đơn hàng có sẵn trong CSDL (Bấm để tra cứu nhanh):',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppTheme.textMuted),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (PharmacyApiService().lastOrderCode != null)
+                        ActionChip(
+                          label: Text(
+                            PharmacyApiService().lastOrderCode!,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () {
+                            final c = PharmacyApiService().lastOrderCode!;
+                            _codeController.text = c;
+                            _fetchOrder(c);
+                          },
+                        ),
+                      for (final sample in ['MOB-2024-9981', 'MOB-2024-9975', 'MOB-2024-9980', 'MOB-2024-9978'])
+                        ActionChip(
+                          label: Text(sample, style: const TextStyle(fontSize: 11)),
+                          onPressed: () {
+                            _codeController.text = sample;
+                            _fetchOrder(sample);
+                          },
+                        ),
                     ],
                   ),
                 ],
@@ -336,9 +368,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _buildStatusTimeline(String currentStatus) {
+    final normalized = currentStatus == 'PACKED' ? 'CONFIRMED' : currentStatus;
     final steps = ['PENDING', 'CONFIRMED', 'SHIPPING', 'COMPLETED'];
-    final labels = ['Đã đặt đơn', 'Dược sĩ duyệt', 'Đang giao', 'Giao thành công'];
-    int currentIndex = steps.indexOf(currentStatus);
+    final labels = ['Chờ xác nhận', 'Dược sĩ duyệt', 'Đang giao', 'Giao thành công'];
+    int currentIndex = steps.indexOf(normalized);
     if (currentIndex == -1) currentIndex = 0;
 
     return Row(

@@ -1,754 +1,607 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import { BatchDetailResponse, InventoryImportRequest, MedicineItem } from '../types/pharmacy';
 import { invalidateMedicinesCache } from '../services/queryClient';
+import { 
+  BatchInventoryDto, 
+  MedicineInventoryItem, 
+  ImportBatchRequest, 
+  MedicineBatchRequest, 
+  MedicineBatchResponse,
+} from '../types/pharmacy';
+import { 
+  Layers, AlertOctagon, AlertTriangle, CheckCircle2, Search, 
+  Plus, RefreshCw, ShieldAlert, CalendarClock, Lock, 
+  X, PackagePlus, Edit3, Trash2, Save
+} from 'lucide-react';
 
-const currency = new Intl.NumberFormat('vi-VN', {
-  style: 'currency',
-  currency: 'VND',
-  maximumFractionDigits: 0,
-});
+const PAGE_SIZE = 10;
 
-export const BatchManagementPage: React.FC = () => {
+export function BatchManagementPage() {
+  const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'EXPIRY_ASC' | 'QTY_DESC' | 'COST_DESC'>('EXPIRY_ASC');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Import Modal State (/api/v1/inventory/import)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importForm, setImportForm] = useState<ImportBatchRequest>({
+    medicineId: '',
+    batchNumber: '',
+    manufacturingDate: new Date().toISOString().split('T')[0],
+    expiryDate: '',
+    quantity: 100,
+    costPrice: 1000,
+  });
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
 
-  // Form state nhập kho
-  const [selectedMedicineId, setSelectedMedicineId] = useState('');
-  const [batchNumber, setBatchNumber] = useState('');
-  const [manufacturingDate, setManufacturingDate] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [costPrice, setCostPrice] = useState<number>(0);
-  const [formError, setFormError] = useState('');
+  // Edit Batch Modal State (PUT /api/batches/{id})
+  const [editingBatch, setEditingBatch] = useState<MedicineBatchRequest | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
-  // 1. Fetch danh sách Lô thuốc từ CSDL thật
-  const { data: batches = [], isLoading, refetch } = useQuery<BatchDetailResponse[]>({
-    queryKey: ['inventoryBatchesReal', filterStatus],
+  // Delete Batch Confirm State (DELETE /api/batches/{id})
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+
+  // 1. Fetch ALL Batches from Backend (/api/v1/inventory/batches?status=all)
+  const { data: batches = [], isLoading, isError, refetch } = useQuery<BatchInventoryDto[]>({
+    queryKey: ['inventory-batches'],
     queryFn: async () => {
-      const res = await api.get(`/v1/inventory/batches?status=${filterStatus}`);
-      return res.data;
+      const response = await api.get('/v1/inventory/batches?status=all');
+      return Array.isArray(response.data) ? response.data : [];
+    }
+  });
+
+  // 2. Fetch Medicines list for dropdown (/api/v1/medicines/search)
+  const { data: medicines = [] } = useQuery<MedicineInventoryItem[]>({
+    queryKey: ['pos-medicines'],
+    queryFn: async () => {
+      const response = await api.get('/v1/medicines/search?q=');
+      return Array.isArray(response.data) ? response.data : [];
     },
   });
 
-  // 2. Fetch danh sách thuốc cho Dropdown modal nhập kho
-  const { data: medicines = [] } = useQuery<MedicineItem[]>({
-    queryKey: ['posMedicinesDropdown'],
-    queryFn: async () => {
-      const res = await api.get('/v1/medicines/search');
-      return res.data;
+  // 3. Import Batch Mutation (POST /api/v1/inventory/import)
+  const importBatchMutation = useMutation({
+    mutationFn: async (payload: ImportBatchRequest) => {
+      const response = await api.post<BatchInventoryDto>('/v1/inventory/import', payload);
+      return response.data;
     },
-  });
-
-  // 3. Mutation Nhập kho lô mới
-  const importMutation = useMutation({
-    mutationFn: async (payload: InventoryImportRequest) => {
-      const res = await api.post('/v1/inventory/import', payload);
-      return res.data;
-    },
-    onSuccess: () => {
+    onSuccess: (newBatch) => {
+      setImportSuccessMsg(
+        `Đã nhập kho thành công lô "${newBatch.id}" (Số lô: ${newBatch.batchNumber}) cho thuốc "${newBatch.medicineName}" (+${newBatch.quantity} đơn vị)!`
+      );
       setIsImportModalOpen(false);
-      resetForm();
-      refetch();
-      invalidateMedicinesCache();
-      alert('✅ Nhập kho lô thuốc thành công theo thuật toán FEFO!');
+      setImportError(null);
+      setImportForm({
+        medicineId: '',
+        batchNumber: '',
+        manufacturingDate: new Date().toISOString().split('T')[0],
+        expiryDate: '',
+        quantity: 100,
+        costPrice: 1000,
+      });
+      invalidateMedicinesCache(queryClient);
     },
     onError: (err: any) => {
-      setFormError(err.response?.data?.message || 'Có lỗi xảy ra khi nhập kho lô thuốc');
+      setImportError(err.response?.data?.message || 'Lỗi khi nhập lô thuốc mới. Vui lòng kiểm tra thông tin (Hạn sử dụng phải lớn hơn ngày hiện tại)!');
     },
   });
 
-  const resetForm = () => {
-    setSelectedMedicineId('');
-    setBatchNumber('');
-    setManufacturingDate('');
-    setExpiryDate('');
-    setQuantity(1);
-    setCostPrice(0);
-    setFormError('');
-  };
+  // 4. Update Batch Mutation (PUT /api/batches/{id} -> LoThuoc table)
+  const updateBatchMutation = useMutation({
+    mutationFn: async (payload: MedicineBatchRequest) => {
+      const response = await api.put<MedicineBatchResponse>(
+        `/batches/${encodeURIComponent(payload.id)}`,
+        payload
+      );
+      return response.data;
+    },
+    onSuccess: (updated) => {
+      setImportSuccessMsg(
+        `Đã cập nhật lô thuốc "${updated.id}" (Số lô: ${updated.batchNumber}) trong bảng LoThuoc!`
+      );
+      setEditingBatch(null);
+      setEditError(null);
+      invalidateMedicinesCache(queryClient);
+    },
+    onError: (err: any) => {
+      setEditError(err.response?.data?.message || 'Không thể cập nhật lô thuốc.');
+    },
+  });
 
-  const handleGenerateBatchCode = () => {
-    const medCode = selectedMedicineId || 'MED';
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    setBatchNumber(`LOT-${medCode}-2026${rand}`);
+  // 5. Delete Batch Mutation (DELETE /api/batches/{id} -> LoThuoc table)
+  const deleteBatchMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/batches/${encodeURIComponent(id)}`);
+      return id;
+    },
+    onSuccess: (deletedId) => {
+      setImportSuccessMsg(`Đã xóa lô thuốc "${deletedId}" khỏi bảng LoThuoc!`);
+      setDeletingBatchId(null);
+      invalidateMedicinesCache(queryClient);
+    },
+    onError: (err: any) => {
+      setDeletingBatchId(null);
+      setImportError(err.response?.data?.message || 'Không thể xóa lô thuốc này (có thể lô đang được hóa đơn hoặc đơn hàng tham chiếu).');
+    },
+  });
+
+  const handleOpenImportModal = () => {
+    const nextLotNum = batches.length + 1;
+    const suggestedLotId = `LOT${String(nextLotNum).padStart(3, '0')}`;
+    setImportForm({
+      medicineId: medicines[0]?.id || '',
+      batchNumber: suggestedLotId,
+      manufacturingDate: new Date().toISOString().split('T')[0],
+      expiryDate: '',
+      quantity: 100,
+      costPrice: 1000,
+    });
+    setImportError(null);
+    setImportSuccessMsg(null);
+    setIsImportModalOpen(true);
   };
 
   const handleImportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError('');
+    setImportError(null);
 
-    if (!selectedMedicineId) {
-      setFormError('Vui lòng chọn thuốc cần nhập');
+    if (!importForm.medicineId) {
+      setImportError('Vui lòng chọn sản phẩm thuốc cần nhập lô!');
       return;
     }
-    if (!expiryDate) {
-      setFormError('Vui lòng chọn hạn sử dụng');
+    if (!importForm.expiryDate) {
+      setImportError('Vui lòng chọn Ngày hết hạn (HanSuDung)!');
       return;
     }
 
-    const payload: InventoryImportRequest = {
-      medicineId: selectedMedicineId,
-      batchNumber: batchNumber.trim() || undefined,
-      manufacturingDate: manufacturingDate || undefined,
-      expiryDate,
-      quantity,
-      costPrice,
-    };
-
-    importMutation.mutate(payload);
+    importBatchMutation.mutate({
+      medicineId: importForm.medicineId,
+      batchNumber: importForm.batchNumber ? importForm.batchNumber.trim().toUpperCase() : undefined,
+      manufacturingDate: importForm.manufacturingDate,
+      expiryDate: importForm.expiryDate,
+      quantity: Number(importForm.quantity),
+      costPrice: Number(importForm.costPrice),
+    });
   };
 
-  // Thống kê số lượng theo cấp độ cảnh báo
-  const criticalCount = batches.filter((b) => b.alertLevel === 'CRITICAL').length;
-  const warningCount = batches.filter((b) => b.alertLevel === 'WARNING').length;
-  const safeCount = batches.filter((b) => b.alertLevel === 'SAFE').length;
-  const expiredCount = batches.filter((b) => b.alertLevel === 'EXPIRED').length;
-
-  const totalCostValue = useMemo(() => {
-    return batches.reduce((sum, b) => sum + (b.costPrice ?? 0) * b.quantity, 0);
-  }, [batches]);
-
-  // Bộ lọc và sắp xếp FEFO
-  const filteredBatches = useMemo(() => {
-    let result = batches.filter((b) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = (b.medicineName || '').toLowerCase().includes(q);
-        const matchesBatch = (b.id || '').toLowerCase().includes(q) || String(b.batchNumber).includes(q);
-        const matchesMedId = (b.medicineId || '').toLowerCase().includes(q);
-        if (!matchesName && !matchesBatch && !matchesMedId) return false;
-      }
-      return true;
+  const handleOpenEditBatch = (batch: BatchInventoryDto) => {
+    setEditingBatch({
+      id: batch.id,
+      medicineId: batch.medicineId,
+      batchNumber: Number(batch.batchNumber),
+      expiryDate: batch.expiryDate,
+      quantity: Number(batch.quantity),
+      purchasePrice: Number(batch.costPrice),
     });
+    setEditError(null);
+  };
 
-    if (sortBy === 'EXPIRY_ASC') {
-      result.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-    } else if (sortBy === 'QTY_DESC') {
-      result.sort((a, b) => b.quantity - a.quantity);
-    } else if (sortBy === 'COST_DESC') {
-      result.sort((a, b) => b.costPrice - a.costPrice);
+  const handleEditBatchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBatch) return;
+    setEditError(null);
+
+    if (!editingBatch.batchNumber || isNaN(Number(editingBatch.batchNumber))) {
+      setEditError('Số lô (SoLo) phải là một số nguyên hợp lệ.');
+      return;
+    }
+    if (!editingBatch.expiryDate) {
+      setEditError('Hạn sử dụng (HanSuDung) không được để trống.');
+      return;
+    }
+    if (editingBatch.quantity < 0) {
+      setEditError('Số lượng tồn (SoLuongTon) không được âm.');
+      return;
+    }
+    if (editingBatch.purchasePrice < 0) {
+      setEditError('Giá nhập (GiaNhap) không được âm.');
+      return;
     }
 
-    return result;
-  }, [batches, searchQuery, sortBy]);
+    updateBatchMutation.mutate({
+      id: editingBatch.id,
+      medicineId: editingBatch.medicineId,
+      batchNumber: Number(editingBatch.batchNumber),
+      expiryDate: editingBatch.expiryDate,
+      quantity: Number(editingBatch.quantity),
+      purchasePrice: Number(editingBatch.purchasePrice),
+    });
+  };
+
+  // Helper to classify FEFO alert level based on daysRemaining
+  // <= 0: EXPIRED, <= 30: CRITICAL, 31-90: WARNING (e.g. 47 days), > 90: SAFE
+  const getBatchLevel = (b: BatchInventoryDto): 'EXPIRED' | 'CRITICAL' | 'WARNING' | 'SAFE' => {
+    const days = Number(b.daysRemaining ?? 0);
+    if (days < 0) return 'EXPIRED';
+    if (days <= 30) return 'CRITICAL';
+    if (days <= 90) return 'WARNING';
+    return 'SAFE';
+  };
+
+  // Accurate Summary Counts across ALL batches in LoThuoc
+  const criticalCount = useMemo(() => batches.filter((b) => getBatchLevel(b) === 'CRITICAL').length, [batches]);
+  const warningCount = useMemo(() => batches.filter((b) => getBatchLevel(b) === 'WARNING').length, [batches]);
+  const safeCount = useMemo(() => batches.filter((b) => getBatchLevel(b) === 'SAFE').length, [batches]);
+  const expiredCount = useMemo(() => batches.filter((b) => getBatchLevel(b) === 'EXPIRED').length, [batches]);
+
+  // Client-side filter by status and search keyword (Safely converting numbers/nulls to String)
+  const filteredBatches = useMemo(() => {
+    const kw = searchTerm.trim().toLowerCase();
+    return batches.filter((b) => {
+      const level = getBatchLevel(b).toLowerCase();
+      const matchesStatus =
+        filterStatus === 'all' || level === filterStatus.toLowerCase();
+
+      const idStr = String(b.id || '').toLowerCase();
+      const batchNumStr = String(b.batchNumber ?? '').toLowerCase();
+      const medNameStr = String(b.medicineName || '').toLowerCase();
+      const medIdStr = String(b.medicineId || '').toLowerCase();
+      const catStr = String(b.category || '').toLowerCase();
+
+      const matchesSearch =
+        !kw ||
+        idStr.includes(kw) ||
+        batchNumStr.includes(kw) ||
+        medNameStr.includes(kw) ||
+        medIdStr.includes(kw) ||
+        catStr.includes(kw);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [batches, filterStatus, searchTerm]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredBatches.length / PAGE_SIZE));
+  const paginatedBatches = useMemo(() => {
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredBatches.slice(start, start + PAGE_SIZE);
+  }, [filteredBatches, currentPage, totalPages]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       
-      {/* ========================================================
-          1. HEADER & HÀNH ĐỘNG
-          ======================================================== */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#0f766e', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>✓</span>
-            <span>TIÊU CHUẨN GPP • KIỂM SOÁT DƯỢC KHO QUỐC GIA</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-500/20">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                Quản Lý Lô Thuốc & Kiểm Soát Hạn Dùng FEFO (Bảng LoThuoc)
+              </h1>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Dữ liệu thực tế từ bảng <code className="font-mono text-slate-700">LoThuoc</code> — Tự động khóa xuất bán các lô hết hạn hoặc cận hạn (&le; 15 ngày)
+              </p>
+            </div>
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: '4px 0 2px', letterSpacing: '-0.02em' }}>
-            Quản Lý Lô Thuốc & Giám Sát Cận Hạn (FEFO Control)
-          </h1>
-          <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
-            Theo dõi tuổi thọ từng lô thuốc, tự động phân loại tín hiệu Đỏ / Vàng / Xanh và tự động ưu tiên xuất kho theo thuật toán First-Expired, First-Out (FEFO).
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button 
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+            Làm mới dữ liệu
+          </button>
+          <button 
+            data-testid="btn-open-import-modal"
+            onClick={handleOpenImportModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Nhập Kho Lô Mới
+          </button>
+        </div>
+      </div>
+
+      {/* Success Toast Banner */}
+      {importSuccessMsg && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-emerald-800 text-xs font-bold shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{importSuccessMsg}</span>
+          </div>
+          <button onClick={() => setImportSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-800">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* FEFO Status Cards (Always accurate from full LoThuoc query) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div 
+          onClick={() => {
+            setFilterStatus('critical');
+            setCurrentPage(1);
+          }}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer ${
+            filterStatus === 'critical' 
+              ? 'bg-rose-50/90 border-rose-400 ring-2 ring-rose-500/20' 
+              : 'bg-white border-slate-200/80 hover:border-rose-300 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-rose-600">Báo Động Đỏ (&le; 30 Ngày)</span>
+            <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <AlertOctagon className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-black text-slate-900 mt-2">{criticalCount} <span className="text-xs font-semibold text-slate-500">lô thuốc</span></p>
+          <p className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1">
+            <Lock className="w-3 h-3" /> Cảnh báo khẩn cấp tại quầy
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setIsImportModalOpen(true);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 18px',
-              borderRadius: 10,
-              border: 'none',
-              background: '#042f2e',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(4, 47, 46, 0.3)'
-            }}
-          >
-            <span>➕</span>
-            <span>Tạo Đơn Nhập Kho Lô Mới</span>
-          </button>
+        <div 
+          onClick={() => {
+            setFilterStatus('warning');
+            setCurrentPage(1);
+          }}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer ${
+            filterStatus === 'warning' 
+              ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-500/20' 
+              : 'bg-white border-slate-200/80 hover:border-amber-300 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-amber-600">Cảnh Báo Vàng (31 - 90 Ngày)</span>
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-black text-slate-900 mt-2">{warningCount} <span className="text-xs font-semibold text-slate-500">lô thuốc</span></p>
+          <p className="text-[11px] font-semibold text-amber-700 mt-1">
+            Được ưu tiên đẩy xuất trước theo FEFO
+          </p>
+        </div>
+
+        <div 
+          onClick={() => {
+            setFilterStatus('safe');
+            setCurrentPage(1);
+          }}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer ${
+            filterStatus === 'safe' 
+              ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-500/20' 
+              : 'bg-white border-slate-200/80 hover:border-emerald-300 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-600">An Toàn (&gt; 90 Ngày)</span>
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-black text-slate-900 mt-2">{safeCount} <span className="text-xs font-semibold text-slate-500">lô thuốc</span></p>
+          <p className="text-[11px] font-semibold text-emerald-600 mt-1">
+            Đủ điều kiện lưu hành tiêu chuẩn
+          </p>
+        </div>
+
+        <div 
+          onClick={() => {
+            setFilterStatus('expired');
+            setCurrentPage(1);
+          }}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer ${
+            filterStatus === 'expired' 
+              ? 'bg-slate-800 text-white border-slate-900 ring-2 ring-slate-500/20' 
+              : 'bg-white border-slate-200/80 hover:border-slate-400 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-xs font-extrabold uppercase tracking-wider ${filterStatus === 'expired' ? 'text-rose-300' : 'text-slate-500'}`}>
+              Đã Quá Hạn Sử Dụng
+            </span>
+            <div className="w-9 h-9 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+          </div>
+          <p className={`text-3xl font-black mt-2 ${filterStatus === 'expired' ? 'text-white' : 'text-slate-900'}`}>
+            {expiredCount} <span className="text-xs font-semibold text-slate-400">lô thuốc</span>
+          </p>
+          <p className={`text-[11px] font-semibold mt-1 ${filterStatus === 'expired' ? 'text-slate-300' : 'text-slate-500'}`}>
+            Cần xuất hủy khỏi kho
+          </p>
         </div>
       </div>
 
-      {/* ========================================================
-          2. 4 THẺ CẢNH BÁO HẠN DÙNG
-          ======================================================== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
-        
-        {/* Card 1: Khẩn Cấp (< 15 ngày) */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #fee2e2',
-          borderLeft: '4px solid #ef4444',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase' }}>
-              KHẨN CẤP (&lt; 15 NGÀY)
-            </span>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#fee2e2',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              color: '#dc2626'
-            }}>
-              🔔
-            </div>
-          </div>
-
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#dc2626', margin: '6px 0 4px' }}>
-            {criticalCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#991b1b', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#dc2626' }} />
-            <span>Chặn bán POS • Lập biên bản hủy / Trả NCC</span>
-          </div>
-        </div>
-
-        {/* Card 2: Cảnh Báo (16 - 30 ngày) */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #fef3c7',
-          borderLeft: '4px solid #f59e0b',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#d97706', textTransform: 'uppercase' }}>
-              CẢNH BÁO (16 - 30 NGÀY)
-            </span>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#fef3c7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              color: '#d97706'
-            }}>
-              ⚠️
-            </div>
-          </div>
-
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#d97706', margin: '6px 0 4px' }}>
-            {warningCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#b45309', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#f59e0b' }} />
-            <span>Ưu tiên xuất bán FEFO ngay tại quầy</span>
-          </div>
-        </div>
-
-        {/* Card 3: An Toàn (> 30 ngày) */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #dcfce7',
-          borderLeft: '4px solid #10b981',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>
-              AN TOÀN (&gt; 30 NGÀY)
-            </span>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#dcfce7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              color: '#16a34a'
-            }}>
-              ✓
-            </div>
-          </div>
-
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#16a34a', margin: '6px 0 4px' }}>
-            {safeCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#15803d', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#10b981' }} />
-            <span>Hạn dùng dồi dào, lưu kho ổn định</span>
-          </div>
-        </div>
-
-        {/* Card 4: Đã Hết Hạn Dùng */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #e2e8f0',
-          borderLeft: '4px solid #64748b',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-              ĐÃ HẾT HẠN DÙNG
-            </span>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#f1f5f9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              color: '#64748b'
-            }}>
-              🚫
-            </div>
-          </div>
-
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#475569', margin: '6px 0 4px' }}>
-            {expiredCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
-          </div>
-
-          <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#64748b' }} />
-            <span>Lập biên bản hoàn trả hoặc tiêu hủy</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          3. BANNER GIÁM SÁT ĐIỀU KIỆN KHO DƯỢC GPP
-          ======================================================== */}
-      <div style={{
-        background: '#042f2e',
-        borderRadius: 14,
-        padding: '14px 20px',
-        color: '#ffffff',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 14,
-        boxShadow: '0 4px 12px rgba(4, 47, 46, 0.25)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: 'rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            color: '#34d399'
-          }}>
-            🌡️
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 800, fontSize: 13.5 }}>Điều Kiện Kho Dược GPP Hiện Tại</span>
-              <span style={{
-                background: '#064e3b',
-                color: '#6ee7b7',
-                fontSize: 10,
-                fontWeight: 800,
-                padding: '1px 6px',
-                borderRadius: 4,
-                border: '1px solid #059669'
-              }}>
-                ĐẠT CHUẨN
-              </span>
-            </div>
-            <div style={{ fontSize: 11.5, color: '#99f6e4', marginTop: 2 }}>
-              Nhiệt độ kho: <strong>22.4°C</strong> • Độ ẩm: <strong>58%</strong> • Kiểm định nhiệt ẩm kế tự động 15 phút/lần.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              TỔNG GIÁ TRỊ TỒN KHO THEO GIÁ VỐN:
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#34d399' }}>
-              {currency.format(totalCostValue)}
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255, 255, 255, 0.12)', paddingLeft: 16 }}>
-            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              LÔ CẦN XỬ LÝ NGAY:
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#f87171' }}>
-              {criticalCount + warningCount} Lô
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          4. BỘ LỌC TABS & SẮP XẾP FEFO
-          ======================================================== */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 14,
-        padding: '12px 18px',
-        border: '1px solid #e2e8f0',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 12,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-      }}>
-        
-        {/* Pills Lọc Cảnh Báo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setFilterStatus('all')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: 'none',
-              background: filterStatus === 'all' ? '#042f2e' : '#f1f5f9',
-              color: filterStatus === 'all' ? '#ffffff' : '#475569',
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: 'pointer'
+      {/* Filter Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full sm:w-96">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Tìm theo Mã lô (LOT001), Số lô (202601), Tên thuốc, Mã SP..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
             }}
-          >
-            Tất cả {batches.length}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFilterStatus('critical')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: filterStatus === 'critical' ? '1.5px solid #ef4444' : '1px solid #fee2e2',
-              background: filterStatus === 'critical' ? '#fee2e2' : '#ffffff',
-              color: '#b91c1c',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <span>🚨</span>
-            <span>Khẩn cấp {criticalCount}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFilterStatus('warning')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: filterStatus === 'warning' ? '1.5px solid #f59e0b' : '1px solid #fef3c7',
-              background: filterStatus === 'warning' ? '#fef3c7' : '#ffffff',
-              color: '#b45309',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <span>⚠️</span>
-            <span>Cảnh báo {warningCount}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFilterStatus('safe')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: filterStatus === 'safe' ? '1.5px solid #10b981' : '1px solid #dcfce7',
-              background: filterStatus === 'safe' ? '#dcfce7' : '#ffffff',
-              color: '#047857',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <span>🟢</span>
-            <span>An toàn {safeCount}</span>
-          </button>
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
         </div>
 
-        {/* Input Tìm kiếm & Dropdown Sắp xếp FEFO */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-            <span>SẮP XẾP ƯU TIÊN:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              style={{
-                padding: '6px 10px',
-                borderRadius: 7,
-                border: '1px solid #cbd5e1',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#334155',
-                background: '#ffffff',
-                outline: 'none'
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+          {[
+            { id: 'all', label: `Tất cả lô (${batches.length})` },
+            { id: 'critical', label: `Khẩn cấp <=30d (${criticalCount})` },
+            { id: 'warning', label: `Cận date 31-90d (${warningCount})` },
+            { id: 'safe', label: `An toàn >90d (${safeCount})` },
+            { id: 'expired', label: `Đã hết hạn (${expiredCount})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setFilterStatus(tab.id);
+                setCurrentPage(1);
               }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                filterStatus === tab.id
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              <option value="EXPIRY_ASC">Hạn Dùng Tăng Dần (FEFO)</option>
-              <option value="QTY_DESC">Số Lượng Tồn Giảm Dần</option>
-              <option value="COST_DESC">Giá Vốn Nhập Cao Nhất</option>
-            </select>
-          </div>
-
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <span style={{ position: 'absolute', left: 10, color: '#94a3b8', fontSize: 12 }}>🔍</span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo mã lô, tên biệt dược..."
-              style={{
-                padding: '6px 10px 6px 28px',
-                borderRadius: 7,
-                border: '1px solid #cbd5e1',
-                fontSize: 12,
-                outline: 'none',
-                background: '#f8fafc',
-                width: 220
-              }}
-            />
-          </div>
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ========================================================
-          5. BẢNG DANH SÁCH LÔ THUỐC THEO FEFO
-          ======================================================== */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 14,
-        border: '1px solid #e2e8f0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
-            <thead style={{
-              background: '#f8fafc',
-              borderBottom: '1px solid #e2e8f0',
-              color: '#64748b',
-              fontWeight: 800,
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase'
-            }}>
-              <tr>
-                <th style={{ padding: '12px 16px' }}>MÃ LÔ</th>
-                <th style={{ padding: '12px 16px' }}>THUỐC / BIỆT DƯỢC & HOẠT CHẤT</th>
-                <th style={{ padding: '12px 14px' }}>SỐ LÔ SX</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>SỐ LƯỢNG TỒN</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>GIÁ VỐN (NHẬP)</th>
-                <th style={{ padding: '12px 14px' }}>NGÀY SẢN XUẤT</th>
-                <th style={{ padding: '12px 14px' }}>HẠN SỬ DỤNG</th>
-                <th style={{ padding: '12px 18px', textAlign: 'right' }}>TUỔI THỌ CÒN LẠI</th>
+      {/* Main Batches Table (Matching LoThuoc schema) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4">Mã Lô (MaLo)</th>
+                <th className="py-3.5 px-4">Số Lô SX (SoLo)</th>
+                <th className="py-3.5 px-4">Sản Phẩm Thuốc (SanPham)</th>
+                <th className="py-3.5 px-4 text-center">Tồn Kho (SoLuongTon)</th>
+                <th className="py-3.5 px-4 text-right">Giá Nhập (GiaNhap)</th>
+                <th className="py-3.5 px-4 text-right">Tổng Giá Vốn</th>
+                <th className="py-3.5 px-4">Hạn Dùng (HanSuDung)</th>
+                <th className="py-3.5 px-4">Trạng Thái FEFO</th>
+                <th className="py-3.5 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-200/60 text-sm">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
-                    Đang nạp danh sách Lô thuốc từ CSDL SQL Server...
+                  <td colSpan={9} className="p-12 text-center text-slate-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    Đang tải danh sách lô thuốc từ bảng LoThuoc...
                   </td>
                 </tr>
-              ) : filteredBatches.length === 0 ? (
+              ) : isError ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
-                    Không tìm thấy lô thuốc nào khớp với bộ lọc.
+                  <td colSpan={9} className="p-12 text-center text-rose-600 font-medium">
+                    Không thể tải dữ liệu lô thuốc từ máy chủ Backend!
+                  </td>
+                </tr>
+              ) : paginatedBatches.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-12 text-center text-slate-500">
+                    Không có lô thuốc nào nằm trong nhóm bộ lọc này.
                   </td>
                 </tr>
               ) : (
-                filteredBatches.map((b) => {
-                  const isCritical = b.alertLevel === 'CRITICAL';
-                  const isWarning = b.alertLevel === 'WARNING';
-                  const isExpired = b.alertLevel === 'EXPIRED';
-
-                  // Pill tuổi thọ còn lại
-                  let remainingBadge = (
-                    <span style={{
-                      background: '#ecfdf5',
-                      color: '#059669',
-                      border: '1px solid #a7f3d0',
-                      padding: '2px 8px',
-                      borderRadius: 999,
-                      fontSize: 11,
-                      fontWeight: 800
-                    }}>
-                      Còn {b.daysRemaining.toLocaleString('vi-VN')} ngày
-                    </span>
-                  );
-
-                  if (isExpired) {
-                    remainingBadge = (
-                      <span style={{
-                        background: '#f1f5f9',
-                        color: '#475569',
-                        border: '1px solid #cbd5e1',
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 800
-                      }}>
-                        Quá hạn {Math.abs(b.daysRemaining)} ngày
-                      </span>
-                    );
-                  } else if (isCritical) {
-                    remainingBadge = (
-                      <span style={{
-                        background: '#fef2f2',
-                        color: '#dc2626',
-                        border: '1px solid #fecaca',
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 800
-                      }}>
-                        Còn {b.daysRemaining} ngày
-                      </span>
-                    );
-                  } else if (isWarning) {
-                    remainingBadge = (
-                      <span style={{
-                        background: '#fffbeb',
-                        color: '#d97706',
-                        border: '1px solid #fde68a',
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 800
-                      }}>
-                        Còn {b.daysRemaining} ngày
-                      </span>
-                    );
-                  }
+                paginatedBatches.map((batch) => {
+                  const qty = Number(batch.quantity ?? 0);
+                  const cost = Number(batch.costPrice ?? 0);
+                  const totalCostValue = qty * cost;
+                  const level = getBatchLevel(batch);
 
                   return (
-                    <tr
-                      key={b.id}
-                      style={{
-                        borderBottom: '1px solid #f1f5f9',
-                        transition: 'background 0.12s'
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                    <tr 
+                      key={batch.id} 
+                      className={`transition-colors ${
+                        level === 'CRITICAL' || level === 'EXPIRED'
+                          ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                          : level === 'WARNING'
+                          ? 'bg-amber-50/20 hover:bg-amber-50/50'
+                          : 'hover:bg-slate-50/80'
+                      }`}
                     >
-                      {/* Cột 1: Mã Lô */}
-                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
-                        <span style={{
-                          background: '#f1f5f9',
-                          color: '#334155',
-                          fontSize: 11,
-                          fontWeight: 800,
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          letterSpacing: '0.02em',
-                          border: '1px solid #e2e8f0'
-                        }}>
-                          {b.id}
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                          {batch.id}
                         </span>
                       </td>
 
-                      {/* Cột 2: Thuốc / Biệt dược & Hoạt chất */}
-                      <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13.5 }}>
-                          {b.medicineName}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                          <span style={{
-                            background: '#f1f5f9',
-                            color: '#475569',
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            padding: '1px 6px',
-                            borderRadius: 4
-                          }}>
-                            {b.category}
-                          </span>
-                          <span style={{ fontSize: 10.5, color: '#94a3b8' }}>
-                            Mã: {b.medicineId}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Cột 3: Số lô SX */}
-                      <td style={{ padding: '12px 14px', verticalAlign: 'middle', color: '#475569', fontWeight: 600 }}>
-                        LOT-{b.batchNumber}
-                      </td>
-
-                      {/* Cột 4: Số lượng tồn */}
-                      <td style={{ padding: '12px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
-                        <span style={{
-                          fontWeight: 900,
-                          fontSize: 13,
-                          color: isCritical ? '#dc2626' : isWarning ? '#d97706' : '#059669'
-                        }}>
-                          {b.quantity} Hộp
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                          {batch.batchNumber}
                         </span>
                       </td>
 
-                      {/* Cột 5: Giá vốn nhập */}
-                      <td style={{ padding: '12px 14px', textAlign: 'right', verticalAlign: 'middle', fontWeight: 700, color: '#334155' }}>
-                        {currency.format(b.costPrice ?? 0)}
+                      <td className="py-3.5 px-4">
+                        <p className="font-bold text-slate-900">{batch.medicineName}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <span className="font-mono font-semibold text-blue-600">{batch.medicineId}</span>
+                          <span>•</span>
+                          <span>{batch.category || 'Chưa phân loại'}</span>
+                        </div>
                       </td>
 
-                      {/* Cột 6: Ngày sản xuất */}
-                      <td style={{ padding: '12px 14px', verticalAlign: 'middle', color: '#64748b', fontSize: 12 }}>
-                        12/05/2022
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="text-sm font-black text-slate-900">
+                          {qty.toLocaleString('vi-VN')}
+                        </span>
+                        <span className="text-xs text-slate-500 ml-1">đv</span>
                       </td>
 
-                      {/* Cột 7: Hạn sử dụng */}
-                      <td style={{ padding: '12px 14px', verticalAlign: 'middle', fontWeight: 800, color: isCritical ? '#dc2626' : '#0f172a' }}>
-                        {b.expiryDate}
+                      <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
+                        {cost.toLocaleString('vi-VN')} ₫
                       </td>
 
-                      {/* Cột 8: Tuổi thọ còn lại */}
-                      <td style={{ padding: '12px 18px', textAlign: 'right', verticalAlign: 'middle' }}>
-                        {remainingBadge}
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900">
+                        {totalCostValue.toLocaleString('vi-VN')} ₫
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
+                          <CalendarClock className="w-3.5 h-3.5 text-slate-400" />
+                          {batch.expiryDate}
+                        </div>
+                        <span className={`text-[11px] font-bold ${
+                          batch.daysRemaining <= 30 ? 'text-rose-600' : batch.daysRemaining <= 90 ? 'text-amber-600' : 'text-emerald-600'
+                        }`}>
+                          {batch.daysRemaining < 0 
+                            ? `Quá hạn ${Math.abs(batch.daysRemaining)} ngày` 
+                            : `Còn ${batch.daysRemaining} ngày`}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        {level === 'EXPIRED' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 text-white">
+                            <Lock className="w-3 h-3 text-rose-400" />
+                            Đã Hết Hạn (Khóa)
+                          </span>
+                        )}
+                        {level === 'CRITICAL' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                            <AlertOctagon className="w-3.5 h-3.5" />
+                            Khẩn Cấp &le; 30 Ngày
+                          </span>
+                        )}
+                        {level === 'WARNING' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Cận Hạn 31-90 Ngày (Ưu tiên FEFO)
+                          </span>
+                        )}
+                        {level === 'SAFE' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            An Toàn Lưu Hành (&gt; 90d)
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditBatch(batch)}
+                            title="Sửa thông tin lô thuốc"
+                            className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingBatchId(batch.id)}
+                            title="Xóa lô thuốc"
+                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -757,309 +610,181 @@ export const BatchManagementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Footer phân trang */}
-        <div style={{
-          padding: '12px 18px',
-          background: '#f8fafc',
-          borderTop: '1px solid #e2e8f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: 12,
-          color: '#64748b'
-        }}>
-          <div>
-            Hiển thị {filteredBatches.length} lô / trang trên tổng số <strong>{batches.length}</strong> lô trong kho
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ padding: '3px 8px', color: '#cbd5e1' }}>&lt;</span>
-            <span style={{ padding: '3px 9px', background: '#042f2e', color: '#fff', borderRadius: 4, fontWeight: 800 }}>1</span>
-            <span style={{ padding: '3px 8px', cursor: 'pointer' }}>2</span>
-            <span style={{ padding: '3px 8px', cursor: 'pointer' }}>3</span>
-            <span style={{ padding: '3px 4px', color: '#94a3b8' }}>...</span>
-            <span style={{ padding: '3px 8px', cursor: 'pointer' }}>14</span>
-            <span style={{ padding: '3px 8px', color: '#334155', cursor: 'pointer' }}>&gt;</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          6. 3 KHỐI THẺ NGUYÊN TẮC NGHIỆP VỤ GPP CUỐI TRANG
-          ======================================================== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
         
-        {/* Card Nghiệp vụ 1 */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #e2e8f0',
-          display: 'flex',
-          gap: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: '#ecfdf5',
-            color: '#059669',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            flexShrink: 0
-          }}>
-            📋
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
-              Nguyên Tắc Xuất Kho FEFO
+        {/* Real Table Footer & Pagination */}
+        <div className="p-4 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
+          <span>
+            Hiển thị <strong>{paginatedBatches.length}</strong> / Tổng số <strong>{filteredBatches.length}</strong> lô thuốc trong bảng <code className="font-mono">LoThuoc</code>
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 disabled:opacity-40 cursor-pointer"
+              >
+                Trước
+              </button>
+              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-2.5 py-1 rounded font-bold cursor-pointer ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 disabled:opacity-40 cursor-pointer"
+              >
+                Tiếp
+              </button>
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>
-              Hệ thống POS tự động khóa các lô thuốc hết hạn và luôn gợi ý lô có hạn dùng gần nhất để được soát xuất bán trước, tránh tình trạng lưu trữ thuốc cận date.
-            </div>
-          </div>
+          )}
         </div>
-
-        {/* Card Nghiệp vụ 2 */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #fee2e2',
-          display: 'flex',
-          gap: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: '#fef2f2',
-            color: '#dc2626',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            flexShrink: 0
-          }}>
-            📑
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 13, color: '#991b1b' }}>
-              Biên Bản Tiêu Hủy Chuẩn GPP
-            </div>
-            <div style={{ fontSize: 11.5, color: '#7f1d1d', marginTop: 4, lineHeight: 1.45 }}>
-              Đối với thuốc khẩn cấp &lt;15 ngày hoặc quá hạn, dược sĩ phụ trách chuyên môn cần lập hội đồng kiểm kê, niêm phong và gửi biên bản lên Sở Y Tế theo quy chế.
-            </div>
-          </div>
-        </div>
-
-        {/* Card Nghiệp vụ 3 */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 18px',
-          border: '1px solid #dcfce7',
-          display: 'flex',
-          gap: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: '#f0fdf4',
-            color: '#16a34a',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            flexShrink: 0
-          }}>
-            ☁️
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 13, color: '#166534' }}>
-              Đồng Bộ CSDL Dược Quốc Gia
-            </div>
-            <div style={{ fontSize: 11.5, color: '#15803d', marginTop: 4, lineHeight: 1.45 }}>
-              Toàn bộ số lô, hạn dùng và phiếu nhập xuất được đồng bộ tự động với Cổng Dữ Liệu Dược Quốc Gia (Bộ Y Tế) theo thời gian thực (Real-time).
-            </div>
-          </div>
-        </div>
-
       </div>
 
-      {/* ========================================================
-          MODAL: TẠO ĐƠN NHẬP KHO LÔ MỚI
-          ======================================================== */}
+      {/* ===================================================================== */}
+      {/* MODAL 1: NHẬP KHO LÔ THUỐC MỚI (POST /api/v1/inventory/import)        */}
+      {/* ===================================================================== */}
       {isImportModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: 20
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: 580,
-            background: '#ffffff',
-            borderRadius: 20,
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
-          }}>
-            <div style={{
-              padding: '18px 24px',
-              background: '#042f2e',
-              color: '#ffffff',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>📦 NHẬP KHO LÔ THUỐC MỚI (FEFO)</h3>
-                <div style={{ fontSize: 11.5, color: '#6ee7b7', marginTop: 2 }}>Khởi tạo thông tin Lô, hạn dùng và cập nhật tồn kho</div>
+        <div data-testid="import-modal" className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+                  <PackagePlus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Nhập Kho Lô Thuốc Mới (FEFO)</h3>
+                  <p className="text-[11px] text-slate-400">Thêm trực tiếp vào bảng LoThuoc & cập nhật tồn kho POS</p>
+                </div>
               </div>
               <button
-                type="button"
                 onClick={() => setIsImportModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleImportSubmit} style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {formError && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '8px 12px', borderRadius: 8, fontSize: 12 }}>
-                  ⚠️ {formError}
+            {/* Form */}
+            <form onSubmit={handleImportSubmit} className="p-6 space-y-4">
+              {importError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                  <AlertOctagon className="w-4 h-4 shrink-0" />
+                  <span>{importError}</span>
                 </div>
               )}
 
+              {/* Medicine Select */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                  Chọn Mặt Hàng Cần Nhập *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Chọn sản phẩm thuốc cần nhập lô (<code className="font-mono">MaSanPham</code>) <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  value={selectedMedicineId}
-                  onChange={(e) => setSelectedMedicineId(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                  data-testid="select-medicine"
+                  value={importForm.medicineId}
+                  onChange={(e) => setImportForm({ ...importForm, medicineId: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
+                  required
                 >
-                  <option value="">-- Chọn thuốc trong danh mục --</option>
+                  <option value="">-- Chọn thuốc trong danh mục SanPham ({medicines.length} thuốc) --</option>
                   {medicines.map((m) => (
                     <option key={m.id} value={m.id}>
-                      [{m.id}] {m.name} (Tồn hiện tại: {m.totalStock})
+                      [{m.id}] {m.name} (Tồn hiện tại: {m.totalStock ?? m.stock ?? 0} đv)
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'flex-end' }}>
+              {/* Batch Code & Expiry Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Số Lô Sản Xuất
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Mã Lô (<code className="font-mono">MaLo</code> - Để trống tự sinh)
                   </label>
                   <input
+                    data-testid="input-batch-number"
                     type="text"
-                    value={batchNumber}
-                    onChange={(e) => setBatchNumber(e.target.value)}
-                    placeholder="Ví dụ: LOT-PC24A"
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleGenerateBatchCode}
-                  style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f1f5f9', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Tạo mã tự động
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Ngày Sản Xuất
-                  </label>
-                  <input
-                    type="date"
-                    value={manufacturingDate}
-                    onChange={(e) => setManufacturingDate(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    maxLength={50}
+                    placeholder="VD: LOT005"
+                    value={importForm.batchNumber || ''}
+                    onChange={(e) => setImportForm({ ...importForm, batchNumber: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 uppercase focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Hạn Sử Dụng *
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Ngày Hết Hạn (<code className="font-mono">HanSuDung</code>) <span className="text-rose-500">*</span>
                   </label>
                   <input
+                    data-testid="input-expiry-date"
                     type="date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    value={importForm.expiryDate}
+                    onChange={(e) => setImportForm({ ...importForm, expiryDate: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 focus:bg-white focus:outline-none focus:border-blue-500"
+                    required
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {/* Quantity & Import Price */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Số Lượng Hộp Nhập *
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Số Lượng Nhập (<code className="font-mono">SoLuongTon</code>) <span className="text-rose-500">*</span>
                   </label>
                   <input
+                    data-testid="input-quantity"
                     type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value))}
                     min={1}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    value={importForm.quantity}
+                    onChange={(e) => setImportForm({ ...importForm, quantity: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                    required
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                    Giá Vốn Nhập (VNĐ) *
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Giá Vốn Nhập (<code className="font-mono">GiaNhap</code> - VNĐ) <span className="text-rose-500">*</span>
                   </label>
                   <input
+                    data-testid="input-import-price"
                     type="number"
-                    value={costPrice}
-                    onChange={(e) => setCostPrice(Number(e.target.value))}
-                    step={1000}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+                    min={0}
+                    step="any"
+                    value={importForm.costPrice}
+                    onChange={(e) => setImportForm({ ...importForm, costPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-700 focus:bg-white focus:outline-none focus:border-blue-500"
+                    required
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+              {/* Actions */}
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsImportModalOpen(false)}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
+                  data-testid="btn-submit-import"
                   type="submit"
-                  disabled={importMutation.isPending}
-                  style={{
-                    padding: '8px 20px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: '#042f2e',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: importMutation.isPending ? 'not-allowed' : 'pointer'
-                  }}
+                  disabled={importBatchMutation.isPending}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  {importMutation.isPending ? 'Đang nhập kho...' : 'Lưu Đơn Nhập Kho'}
+                  {importBatchMutation.isPending ? 'Đang lưu vào kho...' : 'Xác Nhận Nhập Kho'}
                 </button>
               </div>
             </form>
@@ -1067,8 +792,165 @@ export const BatchManagementPage: React.FC = () => {
         </div>
       )}
 
+      {/* ===================================================================== */}
+      {/* MODAL 2: CHỈNH SỬA LÔ THUỐC (PUT /api/batches/{id})                    */}
+      {/* ===================================================================== */}
+      {editingBatch && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-base">Cập Nhật Lô Thuốc: {editingBatch.id}</h3>
+              </div>
+              <button onClick={() => setEditingBatch(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditBatchSubmit} className="p-6 space-y-4">
+              {editError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Sản Phẩm Thuốc (<code className="font-mono">MaSanPham</code>) *
+                </label>
+                <select
+                  value={editingBatch.medicineId}
+                  onChange={(e) => setEditingBatch({ ...editingBatch, medicineId: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                  required
+                >
+                  {medicines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      [{m.id}] {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Số Lô SX (<code className="font-mono">SoLo</code> - Số nguyên) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={editingBatch.batchNumber}
+                    onChange={(e) => setEditingBatch({ ...editingBatch, batchNumber: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Hạn Sử Dụng (<code className="font-mono">HanSuDung</code>) *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editingBatch.expiryDate}
+                    onChange={(e) => setEditingBatch({ ...editingBatch, expiryDate: e.target.value })}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Số Lượng Tồn (<code className="font-mono">SoLuongTon</code>) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={editingBatch.quantity}
+                    onChange={(e) => setEditingBatch({ ...editingBatch, quantity: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Giá Nhập (<code className="font-mono">GiaNhap</code> - VNĐ) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step="any"
+                    value={editingBatch.purchasePrice}
+                    onChange={(e) => setEditingBatch({ ...editingBatch, purchasePrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingBatch(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateBatchMutation.isPending}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {updateBatchMutation.isPending ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL 3: XÁC NHẬN XÓA LÔ THUỐC (DELETE /api/batches/{id})              */}
+      {/* ===================================================================== */}
+      {deletingBatchId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Xác nhận xóa lô thuốc</h3>
+                <p className="text-xs text-slate-500">
+                  Mã lô: <strong className="font-mono text-slate-800">{deletingBatchId}</strong>
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Bạn có chắc chắn muốn xóa lô thuốc này khỏi bảng <code className="font-mono">LoThuoc</code>? Tổng tồn kho khả dụng của sản phẩm sẽ được tính toán lại ngay lập tức.
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setDeletingBatchId(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={deleteBatchMutation.isPending}
+                onClick={() => deleteBatchMutation.mutate(deletingBatchId)}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteBatchMutation.isPending ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-};
-
+}
 export default BatchManagementPage;

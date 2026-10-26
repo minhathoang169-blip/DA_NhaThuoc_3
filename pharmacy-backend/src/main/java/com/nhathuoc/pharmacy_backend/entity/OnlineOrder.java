@@ -33,7 +33,7 @@ public class OnlineOrder {
     private double totalAmount;
 
     @Column(length = 30)
-    private String status = "COMPLETED";
+    private String status = "PENDING";
 
     @Column(length = 255)
     private String shippingAddress;

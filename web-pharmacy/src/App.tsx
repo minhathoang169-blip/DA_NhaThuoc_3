@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './services/queryClient';
@@ -6,31 +6,28 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PortalLayout } from './components/PortalLayout';
 
-// Internal Management Portal Pages
+// Pages
 import { LoginPage } from './pages/auth/LoginPage';
-import { PosPage } from './pages/PosPage';
+import { DashboardPage } from './pages/DashboardPage';
+import PosPage from './pages/PosPage';
+import { MedicinesPage } from './pages/MedicinesPage';
 import { BatchManagementPage } from './pages/BatchManagementPage';
 import { OrdersPage } from './pages/OrdersPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { MedicinesPage } from './pages/MedicinesPage';
+import { CatalogManagementPage } from './pages/CatalogManagementPage';
+
+// Customer Storefront Pages
+import { StorefrontLayout, CartItem } from './pages/storefront/StorefrontLayout';
+import { StorefrontPage } from './pages/storefront/StorefrontPage';
+import { OrderTrackingPage } from './pages/storefront/OrderTrackingPage';
 
 /**
- * Root Index Redirector:
- * - Chưa đăng nhập -> Chuyển hướng bắt buộc vào /login
- * - Dược sĩ (PHARMACIST) -> Chuyển hướng thẳng vào /pos (Trọng tâm bán lẻ)
- * - Quản lý (ADMIN) -> Chuyển hướng vào /dashboard (Báo cáo điều hành)
+ * Smart Home Redirector based on user role:
+ * - ADMIN -> /dashboard
+ * - PHARMACIST -> /pos
+ * - CUSTOMER -> /store
  */
-const RootRedirect: React.FC = () => {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: 14 }}>
-        <div style={{ width: 44, height: 44, border: '4px solid #e2e8f0', borderTop: '4px solid #0f766e', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <span style={{ color: '#64748b', fontSize: 13, fontWeight: 600 }}>Đang xác thực quyền truy cập hệ thống...</span>
-      </div>
-    );
-  }
+function RoleBasedHomeRedirect() {
+  const { user } = useAuth();
 
   if (!user || !user.token) {
     return <Navigate to="/login" replace />;
@@ -40,66 +37,154 @@ const RootRedirect: React.FC = () => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Navigate to="/pos" replace />;
-};
+  if (user.role === 'CUSTOMER') {
+    return <Navigate to="/store" replace />;
+  }
 
-export const App: React.FC = () => {
+  return <Navigate to="/pos" replace />;
+}
+
+/**
+ * If a CUSTOMER visits /customers, redirect them to /store (Customer Storefront)
+ * instead of showing a 403 Forbidden error.
+ */
+function CustomersRouteGuard() {
+  const { user } = useAuth();
+  if (user?.role === 'CUSTOMER') {
+    return <Navigate to="/store" replace />;
+  }
+  return (
+    <ProtectedRoute allowedRoles={['ADMIN', 'PHARMACIST']}>
+      <PortalLayout />
+    </ProtectedRoute>
+  );
+}
+
+/**
+ * Guard for Customer Storefront:
+ * Only CUSTOMER (or unauthenticated guest) uses the Customer Storefront (/store).
+ * If ADMIN or PHARMACIST navigates to /store, redirect them to their internal portal.
+ */
+function StorefrontRouteGuard({
+  cartCount,
+  onOpenCart,
+}: {
+  cartCount: number;
+  onOpenCart: () => void;
+}) {
+  const { user } = useAuth();
+  if (user?.role === 'ADMIN') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  if (user?.role === 'PHARMACIST') {
+    return <Navigate to="/pos" replace />;
+  }
+  return <StorefrontLayout cartCount={cartCount} onOpenCart={onOpenCart} />;
+}
+
+/**
+ * Inner Router that resets cart state automatically per user session (keyed by username)
+ */
+function AppRoutes() {
+  const { user } = useAuth();
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+
+  const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  return (
+    <Routes key={user?.username || 'guest'}>
+      {/* Public Login Route */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Customer Online Storefront & Order Tracking Routes (Only for CUSTOMER / Guest) */}
+      <Route
+        element={
+          <StorefrontRouteGuard
+            cartCount={totalCartItems}
+            onOpenCart={() => setIsCartOpen(true)}
+          />
+        }
+      >
+        <Route
+          path="/store"
+          element={
+            <StorefrontPage
+              cart={cart}
+              setCart={setCart}
+              isCartOpen={isCartOpen}
+              setIsCartOpen={setIsCartOpen}
+            />
+          }
+        />
+        <Route path="/track-order" element={<OrderTrackingPage />} />
+      </Route>
+
+      {/* Special handling for /customers so CUSTOMER role goes to /store */}
+      <Route element={<CustomersRouteGuard />}>
+        <Route path="/customers" element={<CatalogManagementPage />} />
+      </Route>
+
+      {/* Protected Enterprise Portal Routes (ADMIN & PHARMACIST) */}
+      <Route
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'PHARMACIST']}>
+            <PortalLayout />
+          </ProtectedRoute>
+        }
+      >
+        {/* Dashboard (Accessible to ADMIN and PHARMACIST) */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'PHARMACIST']}>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Shared Operations (Accessible to both ADMIN and PHARMACIST) */}
+        <Route path="/pos" element={<PosPage />} />
+        <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/batches" element={<BatchManagementPage />} />
+        <Route path="/medicines" element={<MedicinesPage />} />
+
+        {/* Admin-only Catalog Management Routes */}
+        <Route
+          path="/suppliers"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <CatalogManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employees"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <CatalogManagementPage />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+
+      {/* Default index & Fallback Catch-all based on Role */}
+      <Route index element={<RoleBasedHomeRedirect />} />
+      <Route path="*" element={<RoleBasedHomeRedirect />} />
+    </Routes>
+  );
+}
+
+export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            {/* 1. Trang Đăng Nhập Duy Nhất Của Hệ Thống */}
-            <Route path="/login" element={<LoginPage />} />
-
-            {/* 2. Root Redirect theo Phân Quyền */}
-            <Route path="/" element={<RootRedirect />} />
-
-            {/* 3. Toàn bộ Portal Quản Trị & Vận Hành Nội Bộ */}
-            <Route
-              element={
-                <ProtectedRoute allowedRoles={['ADMIN', 'PHARMACIST']}>
-                  <PortalLayout />
-                </ProtectedRoute>
-              }
-            >
-              {/* Bán Hàng Tại Quầy (POS Screen) */}
-              <Route path="/pos" element={<PosPage />} />
-
-              {/* Quản Lý Danh Mục Thuốc & Hoạt Chất */}
-              <Route path="/medicines" element={<MedicinesPage />} />
-
-              {/* Quản Lý Lô, Nhập Kho & Cảnh Báo Hạn Dùng (FEFO) */}
-              <Route path="/inventory" element={<BatchManagementPage />} />
-
-              {/* Xử Lý Đơn Hàng Mobile App Khách Hàng */}
-              <Route path="/orders" element={<OrdersPage />} />
-
-              {/* Dashboard Báo Cáo Doanh Thu & Kho (CHỈ DÀNH CHO ADMIN) */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={['ADMIN']}>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-            </Route>
-
-            {/* 4. Tương Thích Ngược Với Đường Dẫn Cũ */}
-            <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/admin/pos" element={<Navigate to="/pos" replace />} />
-            <Route path="/admin/products" element={<Navigate to="/medicines" replace />} />
-            <Route path="/admin/orders" element={<Navigate to="/orders" replace />} />
-            <Route path="/admin/alerts" element={<Navigate to="/inventory" replace />} />
-
-            {/* 5. Mọi đường dẫn không hợp lệ đều chuyển về Root */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
   );
-};
+}
 
 export default App;

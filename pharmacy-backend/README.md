@@ -108,3 +108,14 @@ Các nhóm API danh mục có GET danh sách, GET theo ID, POST, PUT và DELETE 
 Test hiện có gồm tải context, CRUD danh mục và hai test mong đợi request trái phép nhận 401. Hai kỳ vọng 401 không khớp SecurityConfig hiện tại; chưa chạy test. Người dùng báo API thuốc/khách hàng/nhân viên đã trả JSON; trạng thái runtime chưa được Codex tự xác minh.
 
 Schema mở rộng nằm trong `schema_extensions.sql`. Các API giao dịch phụ thuộc các bảng tương ứng và database đã được quản trị viên cấu hình; dự án không chèn tài khoản hoặc dữ liệu mẫu để làm sẵn màn hình.
+
+---
+
+## 🔑 Tài Khoản Đăng Nhập (`QuanLyNhaThuocDB.dbo.users`)
+
+| STT | Vai trò (`role`) | Tài khoản (`username`) | Mật khẩu (`password`) | Họ và tên (`fullName`) |
+| :-- | :--- | :--- | :--- | :--- |
+| **1** | **`ADMIN`** | `admin` | `admin123` | DS. CKII Lê Hoàng Nam |
+| **2** | **`PHARMACIST`** | `pharmacist` | `pharmacist123` | DS. Trần Minh Anh |
+| **3** | **`CUSTOMER`** | `customer` | `customer123` | Nguyễn Hoàng Long |
+

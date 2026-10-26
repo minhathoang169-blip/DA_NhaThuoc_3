@@ -31,7 +31,7 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
           
           {/* Brand Logo */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
+          <Link to="/store" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 24, fontWeight: 800 }}>
               +
             </div>
@@ -43,8 +43,8 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
 
           {/* Navigation Links */}
           <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <Link to="/" style={{ color: '#1e293b', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
-              Danh Mục Thuốc
+            <Link to="/store" style={{ color: '#1e293b', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
+              🛍️ Danh Mục & Đặt Mua Thuốc
             </Link>
             <Link to="/track-order" style={{ color: '#0f766e', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
               🔍 Tra Cứu Đơn Hàng
@@ -57,7 +57,7 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
             {user && (user.role === 'ADMIN' || user.role === 'PHARMACIST') && (
               <button
                 type="button"
-                onClick={() => navigate('/admin')}
+                onClick={() => navigate(user.role === 'ADMIN' ? '/dashboard' : '/pos')}
                 style={{
                   background: '#fef3c7',
                   border: '1px solid #fde68a',
@@ -72,7 +72,7 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
                   gap: 6,
                 }}
               >
-                ⚙️ Vào Trang Quản Trị ({user.role})
+                ⚙️ Về Trang Quản Trị ({user.role})
               </button>
             )}
 
@@ -111,7 +111,10 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
                 </span>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    navigate('/login');
+                  }}
                   style={{
                     background: 'none',
                     border: '1px solid #cbd5e1',
@@ -126,21 +129,38 @@ export const StorefrontLayout: React.FC<{ cartCount?: number; onOpenCart?: () =>
                 </button>
               </div>
             ) : (
-              <Link
-                to="/login"
-                style={{
-                  background: '#f1f5f9',
-                  color: '#1e293b',
-                  padding: '7px 14px',
-                  borderRadius: 20,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  border: '1px solid #cbd5e1',
-                }}
-              >
-                Đăng Nhập
-              </Link>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Link
+                  to="/login"
+                  style={{
+                    background: '#f1f5f9',
+                    color: '#1e293b',
+                    padding: '7px 14px',
+                    borderRadius: 20,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    border: '1px solid #cbd5e1',
+                  }}
+                >
+                  Đăng Nhập
+                </Link>
+                <Link
+                  to="/login?mode=register"
+                  style={{
+                    background: '#f0fdfa',
+                    color: '#0f766e',
+                    padding: '7px 14px',
+                    borderRadius: 20,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    border: '1px solid #99f6e4',
+                  }}
+                >
+                  ✨ Đăng Ký
+                </Link>
+              </div>
             )}
           </div>
         </div>

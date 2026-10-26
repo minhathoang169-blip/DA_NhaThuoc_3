@@ -21,7 +21,7 @@ Hệ sinh thái phần mềm quản lý vận hành nhà thuốc toàn diện đ
    - Biểu đồ Donut cơ cấu kênh bán hàng.
    - Thống kê Top 5 mặt hàng bán chạy nhất và giám sát điều kiện nhiệt độ/độ ẩm kho GPP.
 6. **Dữ Liệu Từ Database Được Cấu Hình**:
-   - Ứng dụng không tự tạo tài khoản, thuốc, lô hàng, khách hàng hay đơn hàng mẫu. Cần cấu hình database và nạp dữ liệu thực tế trước khi sử dụng.
+   - Ứng dụng kết nối trực tiếp cơ sở dữ liệu `QuanLyNhaThuocDB` trên SQL Server.
 
 ---
 
@@ -31,14 +31,14 @@ Hệ sinh thái phần mềm quản lý vận hành nhà thuốc toàn diện đ
 DA_NhaThuoc_3/
 ├── pharmacy-backend/              # Spring Boot REST API Service
 │   ├── src/main/java/.../         # Controllers, Services, Repositories, Entities, DTOs, Security
-│   ├── src/main/resources/        # Cấu hình ứng dụng và script cấu trúc database (không chứa dữ liệu mẫu)
+│   ├── src/main/resources/        # Cấu hình ứng dụng và script cấu trúc database
 │   ├── src/test/java/.../         # Bộ kiểm thử tự động (FEFO, POS Concurrency, RBAC, Substitute)
 │   └── mobile_pharmacy/           # Ứng dụng di động khách hàng Flutter
 │       ├── lib/models/            # Medicine, Order, CartItem models
 │       ├── lib/screens/           # HomeScreen, CartScreen, CheckoutScreen, OrderTrackingScreen
 │       └── lib/services/          # PharmacyApiService, CartManager
 └── web-pharmacy/                  # Dashboard Quản Trị & Bán Hàng React / Vite
-    ├── src/pages/                 # PosPage, DashboardPage, MedicinesPage, BatchManagementPage, OrdersPage
+    ├── src/pages/                 # PosPage, DashboardPage, MedicinesPage, BatchManagementPage, OrdersPage, CatalogManagementPage
     ├── src/components/            # PortalLayout, ProtectedRoute, ExpiringAlertBadge
     ├── src/context/               # AuthContext (JWT Authentication & Role Management)
     └── src/services/              # Axios interceptors, TanStack React Query client
@@ -46,15 +46,16 @@ DA_NhaThuoc_3/
 
 ---
 
-## 🖥 5 Phân Hệ Web Portal Quản Trị ([web-pharmacy](file:///f:/DA_NhaThuoc_3/web-pharmacy))
+## 🖥 Phân Hệ Web Portal Quản Trị ([web-pharmacy](file:///c:/DA_NhaThuoc_3/web-pharmacy))
 
 | Phân hệ | Đường dẫn | Chức năng nghiệp vụ chính |
 | :--- | :--- | :--- |
-| **1. Bán Hàng Quầy (POS)** | `/pos` | Lập hóa đơn quầy `#POS-8842`, tìm thuốc nhanh theo tên/barcode, thêm vào giỏ, chọn khách hàng VIP, tính chiết khấu, gợi ý tiền đưa, tính tiền thừa và in hóa đơn. |
-| **2. Báo Cáo Doanh Thu & Vận Hành** | `/dashboard` | Thống kê tổng doanh thu tích lũy, tổng đơn hoàn tất, cảnh báo cận hạn, tồn kho tối thiểu, biểu đồ 7 ngày, cơ cấu kênh bán và Top 5 thuốc bán chạy. |
+| **1. Bán Hàng Quầy (POS)** | `/pos` | Lập hóa đơn quầy, tìm thuốc nhanh theo tên/barcode, thêm vào giỏ, chọn khách hàng VIP, tính chiết khấu, gợi ý tiền đưa, tính tiền thừa và in hóa đơn. |
+| **2. Báo Cáo Doanh Thu & Vận Hành** | `/dashboard` | Thống kê tổng doanh thu tích lũy, tổng đơn hoàn tất, cảnh báo cận hạn FEFO, tồn kho tối thiểu, biểu đồ 7 ngày, cơ cấu kênh bán và Top 5 thuốc bán chạy. |
 | **3. Danh Mục & Hoạt Chất** | `/medicines` | Quản lý danh mục dược phẩm chuẩn hóa INN Bộ Y Tế, mã vạch Barcode EAN-13, phân nhóm điều trị, phân loại Rx / OTC / TPCN, đơn giá và tồn kho an toàn. |
-| **4. Quản Lý Lô & Cận Hạn (FEFO)** | `/inventory` | Theo dõi tuổi thọ từng lô thuốc, phân loại Đỏ / Vàng / Xanh, giám sát điều kiện kho Dược GPP (22.4°C / 58%), tạo đơn nhập kho lô mới. |
+| **4. Quản Lý Lô & Cận Hạn (FEFO)** | `/batches` | Theo dõi tuổi thọ từng lô thuốc (`LoThuoc`), phân loại Đỏ / Vàng / Xanh, giám sát điều kiện kho Dược GPP (22.4°C / 58%), tạo đơn nhập kho lô mới. |
 | **5. Đơn Hàng Mobile App** | `/orders` | Tiếp nhận đơn đặt hàng từ ứng dụng di động khách hàng theo thời gian thực (Live Polling 5s), kiểm tra ảnh đơn thuốc bác sĩ (Rx), bấm "Xác nhận & Trừ kho FEFO". |
+| **6. Danh Mục Hệ Thống** | `/catalogs` | Quản lý Khách hàng (`KhachHang`), Nhân viên (`NhanVien`) và Nhà cung cấp (`NhaCungCap`). |
 
 ---
 
@@ -99,7 +100,13 @@ npm.cmd run dev
 
 ### 3. Tài Khoản Đăng Nhập
 
-Ứng dụng không tạo sẵn tài khoản. Quản trị viên database/hệ thống cần tạo tài khoản thật với vai trò phù hợp trước khi đăng nhập; không có username hoặc password mặc định trong source code.
+Dưới đây là danh sách các tài khoản có sẵn trong bảng `users` của CSDL `QuanLyNhaThuocDB`:
+
+| STT | Vai trò (`role`) | Tài khoản (`username`) | Mật khẩu (`password`) | Họ và tên (`fullName`) | Quyền truy cập |
+| :-- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **`ADMIN`** (Quản trị viên) | `admin` | `admin123` | DS. CKII Lê Hoàng Nam | Toàn quyền: Bán hàng POS, Báo cáo vận hành, Danh mục thuốc, Quản lý lô FEFO, Đơn hàng Online, Danh mục hệ thống |
+| **2** | **`PHARMACIST`** (Dược sĩ) | `pharmacist` | `pharmacist123` | DS. Trần Minh Anh | Dược sĩ quầy: Bán hàng POS, Danh mục thuốc, Quản lý lô FEFO, Đơn hàng Online |
+| **3** | **`CUSTOMER`** (Khách hàng) | `customer` | `customer123` | Nguyễn Hoàng Long | Khách hàng đặt thuốc Online / Mobile App |
 
 ---
 
@@ -133,3 +140,13 @@ npm.cmd run build
 - Dự án: **Hệ Thống Quản Lý Dược Chuẩn GPP**
 - Repository: [https://github.com/minhathoang169-blip/DA_NhaThuoc_3](https://github.com/minhathoang169-blip/DA_NhaThuoc_3)
 - Nhánh phát triển: `cap-nhat-4`
+
+---
+
+## 🔑 Thông Tin Tài Khoản & Mật Khẩu Đăng Nhập (`QuanLyNhaThuocDB`)
+
+| STT | Vai trò (Role) | Tài khoản (`username`) | Mật khẩu (`password`) | Họ và tên (`fullName`) | Quyền truy cập |
+| :-- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **`ADMIN`** | `admin` | `admin123` | DS. CKII Lê Hoàng Nam | Toàn quyền quản trị & bán hàng |
+| **2** | **`PHARMACIST`** | `pharmacist` | `pharmacist123` | DS. Trần Minh Anh | Dược sĩ bán hàng POS, Quản lý lô & Đơn hàng |
+| **3** | **`CUSTOMER`** | `customer` | `customer123` | Nguyễn Hoàng Long | Khách hàng đặt thuốc Online |

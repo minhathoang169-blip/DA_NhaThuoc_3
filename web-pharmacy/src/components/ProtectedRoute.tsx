@@ -50,7 +50,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     : true;
 
   if (allowedRoles && allowedRoles.length > 0 && !hasAllowedRole) {
-    const defaultHome = userRole === 'ADMIN' ? '/dashboard' : '/pos';
+    const defaultHome = userRole === 'ADMIN' ? '/dashboard' : userRole === 'CUSTOMER' ? '/store' : '/pos';
 
     return (
       <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} data-testid="forbidden-page">
@@ -81,7 +81,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
                 boxShadow: '0 4px 6px -1px rgba(15, 118, 110, 0.2)'
               }}
             >
-              Về Trang Nghiệp Vụ Của Bạn
+              {userRole === 'CUSTOMER' ? '🛍️ Về Cửa Hàng Đặt Thuốc Online' : 'Về Trang Nghiệp Vụ Của Bạn'}
             </Link>
             <button
               type="button"

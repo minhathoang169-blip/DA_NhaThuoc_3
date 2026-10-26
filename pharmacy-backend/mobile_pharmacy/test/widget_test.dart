@@ -6,11 +6,12 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const PharmacyMobileApp());
 
-    // Verify app brand is rendered
+    // Verify app brand and 4 bottom navigation tabs are rendered
     expect(find.text('DƯỢC AN'), findsOneWidget);
     expect(find.text('NHÀ THUỐC GPP'), findsOneWidget);
     expect(find.text('Mua thuốc'), findsOneWidget);
     expect(find.text('Tra cứu đơn'), findsOneWidget);
     expect(find.text('Giỏ hàng'), findsOneWidget);
+    expect(find.text('Tài khoản'), findsOneWidget);
   });
 }
