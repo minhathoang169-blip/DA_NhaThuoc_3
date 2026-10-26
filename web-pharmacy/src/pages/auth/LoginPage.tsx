@@ -7,8 +7,8 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -38,12 +38,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillQuickAccount = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setError('');
   };
 
   return (
@@ -145,59 +139,6 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick-fill Account Selector */}
-          <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px dashed #e2e8f0' }}>
-            <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Chọn nhanh tài khoản phân quyền:
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => fillQuickAccount('admin', 'admin123')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.2s'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>👑 ADMIN (Quản trị viên)</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Xem Dashboard tài chính, toàn quyền kho, đơn & nhân sự</div>
-                </div>
-                <span style={{ color: '#0f766e', fontWeight: 700, fontSize: 12 }}>Chọn →</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickAccount('pharmacist', 'pharmacist123')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.2s'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>💊 PHARMACIST (Dược sĩ quầy)</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Bán lẻ POS, kiểm soát Lô FEFO & đơn từ App di động</div>
-                </div>
-                <span style={{ color: '#0f766e', fontWeight: 700, fontSize: 12 }}>Chọn →</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

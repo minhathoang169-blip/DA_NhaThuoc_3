@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('E2E Pharmacy System: Quy trình bán hàng tại quầy (POS Happy Path)', () => {
   const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
+  const E2E_USERNAME = process.env.PHARMACY_E2E_USERNAME;
+  const E2E_PASSWORD = process.env.PHARMACY_E2E_PASSWORD;
 
   test.beforeEach(async ({ page }) => {
     // Thiết lập viewport tiêu chuẩn màn hình bán hàng quầy POS (Full HD Desktop)
@@ -9,6 +11,7 @@ test.describe('E2E Pharmacy System: Quy trình bán hàng tại quầy (POS Happ
   });
 
   test('Happy Path: Đăng nhập Dược sĩ -> Vào POS -> Tìm thuốc -> Bán FEFO -> Xác minh Hóa đơn & Lô trừ', async ({ page }) => {
+    test.skip(!E2E_USERNAME || !E2E_PASSWORD, 'Cần tài khoản thật qua PHARMACY_E2E_USERNAME và PHARMACY_E2E_PASSWORD.');
     // -------------------------------------------------------------------------
     // BƯỚC 1: ĐĂNG NHẬP DƯỢC SĨ
     // -------------------------------------------------------------------------
@@ -20,8 +23,8 @@ test.describe('E2E Pharmacy System: Quy trình bán hàng tại quầy (POS Happ
     const submitBtn = page.locator('button[type="submit"], button[data-testid="login-submit"]');
 
     await expect(usernameInput).toBeVisible();
-    await usernameInput.fill('pharmacist');
-    await passwordInput.fill('pharmacist123');
+    await usernameInput.fill(E2E_USERNAME!);
+    await passwordInput.fill(E2E_PASSWORD!);
     await submitBtn.click();
 
     // Xác minh đăng nhập thành công: chuyển hướng vào trang chính hoặc màn hình POS

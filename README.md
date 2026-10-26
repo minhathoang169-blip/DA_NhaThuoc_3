@@ -20,8 +20,8 @@ Hệ sinh thái phần mềm quản lý vận hành nhà thuốc toàn diện đ
    - Biểu đồ biến động doanh thu 7 ngày (Quầy POS vs Mobile App).
    - Biểu đồ Donut cơ cấu kênh bán hàng.
    - Thống kê Top 5 mặt hàng bán chạy nhất và giám sát điều kiện nhiệt độ/độ ẩm kho GPP.
-6. **Sử Dụng Dữ Liệu Thật 100%**:
-   - Toàn bộ danh mục thuốc, lô hàng, khách hàng, doanh thu và đơn hàng được lưu trữ và truy vấn trực tiếp từ cơ sở dữ liệu SQL Server (`QuanLyNhaThuocDB`). Tuyệt đối không sử dụng dữ liệu giả lập (mock data) trên web.
+6. **Dữ Liệu Từ Database Được Cấu Hình**:
+   - Ứng dụng không tự tạo tài khoản, thuốc, lô hàng, khách hàng hay đơn hàng mẫu. Cần cấu hình database và nạp dữ liệu thực tế trước khi sử dụng.
 
 ---
 
@@ -31,7 +31,7 @@ Hệ sinh thái phần mềm quản lý vận hành nhà thuốc toàn diện đ
 DA_NhaThuoc_3/
 ├── pharmacy-backend/              # Spring Boot REST API Service
 │   ├── src/main/java/.../         # Controllers, Services, Repositories, Entities, DTOs, Security
-│   ├── src/main/resources/        # application-sqlserver.properties, seed_real_data.sql
+│   ├── src/main/resources/        # Cấu hình ứng dụng và script cấu trúc database (không chứa dữ liệu mẫu)
 │   ├── src/test/java/.../         # Bộ kiểm thử tự động (FEFO, POS Concurrency, RBAC, Substitute)
 │   └── mobile_pharmacy/           # Ứng dụng di động khách hàng Flutter
 │       ├── lib/models/            # Medicine, Order, CartItem models
@@ -76,7 +76,7 @@ Mở terminal tại thư mục `pharmacy-backend`:
 ```powershell
 # Thiết lập biến môi trường kết nối SQL Server (nếu cần)
 $env:DB_HOST = "localhost"
-$env:DB_PORT = "1433"
+$env:DB_PORT = "59177"
 $env:DB_NAME = "QuanLyNhaThuocDB"
 
 # Khởi chạy ứng dụng Spring Boot với profile SQL Server
@@ -97,12 +97,9 @@ npm.cmd run dev
 ```
 - Giao diện web chạy tại: **`http://localhost:5173`**
 
-### 3. Tài Khoản Đăng Nhập Mặc Định
+### 3. Tài Khoản Đăng Nhập
 
-| Vai trò | Tên đăng nhập | Mật khẩu | Quyền hạn truy cập |
-| :--- | :--- | :--- | :--- |
-| **Quản Lý (ADMIN)** | `admin` | `admin123` | Toàn quyền truy cập Dashboard báo cáo, POS quầy, Quản lý Lô, Danh mục & Đơn hàng Mobile. |
-| **Dược Sĩ (PHARMACIST)** | `pharmacist` | `pharmacist123` | Bán hàng quầy POS, xử lý đơn mobile và quản lý kho cận hạn. |
+Ứng dụng không tạo sẵn tài khoản. Quản trị viên database/hệ thống cần tạo tài khoản thật với vai trò phù hợp trước khi đăng nhập; không có username hoặc password mặc định trong source code.
 
 ---
 
