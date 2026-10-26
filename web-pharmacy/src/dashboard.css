@@ -384,6 +384,11 @@ th { color: #687782; }
 td { height: 70px; }
 .logout-button { padding: 8px 11px; border: 1px solid #e0e8e3; border-radius: 8px; color: #52665b; }
 .logout-button:hover { color: #993c35; background: #fff5f2; }
+.pos-mobile-tools, .transaction-mobile-footer, .pos-mobile-history { display: none; }
+.transaction-line { grid-template-columns: minmax(220px, 2fr) minmax(100px, .7fr) minmax(140px, 1fr) minmax(125px, .8fr) auto; }
+.pos-line-total { display: grid; gap: 5px; padding-bottom: 9px; color: #64766b; font-size: 10px; }
+.pos-line-total strong { color: #194a35; font-size: 12px; }
+.transaction-line .remove-line { align-self: end; margin-bottom: 4px; }
 
 @media (max-width: 1100px) {
   .topbar { padding-inline: 20px; }
@@ -396,6 +401,51 @@ td { height: 70px; }
   .page-heading { align-items: flex-start; }
   .table-toolbar { padding: 8px; }
   .inventory-section { padding-inline: 10px; }
+}
+@media (max-width: 720px) {
+  .resource-page:has(.transaction-mobile-footer) { padding-bottom: 112px; }
+  .transaction-form:has(.transaction-mobile-footer) { padding: 15px 13px 13px; margin-bottom: 24px; overflow: visible; }
+  .transaction-form:has(.transaction-mobile-footer) .pos-mobile-tools { display: flex; align-items: center; gap: 10px; margin: 0 0 17px; }
+  .pos-mobile-tools > span { flex: 0 0 auto; color: #63766a; font-size: 10px; }
+  .pos-search { display: flex; min-width: 0; height: 41px; flex: 1; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid #dce5dc; border-radius: 10px; color: #60776a; background: #fff; }
+  .pos-search > span { font-size: 20px; }
+  .pos-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #23372a; background: transparent; font: 12px 'DM Sans', sans-serif; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-fields { grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-fields .form-field:nth-child(1),
+  .transaction-form:has(.transaction-mobile-footer) .transaction-fields .form-field:nth-child(2) { grid-column: 1 / -1; }
+  .transaction-form:has(.transaction-mobile-footer) .form-field > span { font-size: 10px; }
+  .transaction-form:has(.transaction-mobile-footer) .form-field input,
+  .transaction-form:has(.transaction-mobile-footer) .form-field select { height: 43px; font-size: 12px; }
+  .transaction-lines-heading { align-items: center; margin-top: 22px; }
+  .transaction-lines-heading .eyebrow { margin-bottom: 3px; font-size: 8px; }
+  .transaction-lines-heading h2 { font-size: 15px; }
+  .transaction-lines-heading .icon-action { min-height: 34px; padding-inline: 10px; font-size: 10px; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-lines { gap: 9px; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-line { grid-template-columns: minmax(0, 1fr) minmax(100px, .7fr); align-items: end; gap: 10px; padding: 12px; border: 1px solid #e1e9e2; border-radius: 11px; background: #fbfdfb; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-line .form-field:first-child { grid-column: 1 / -1; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-line .pos-line-total { grid-column: 1; padding: 0; align-self: center; }
+  .transaction-form:has(.transaction-mobile-footer) .transaction-line .remove-line { grid-column: 2; justify-self: end; margin: 0; }
+  .transaction-desktop-footer { display: none; }
+  .transaction-mobile-footer { position: sticky; z-index: 3; bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px -4px 0; padding: 12px; border: 1px solid #dce8df; border-radius: 12px; background: rgb(255 255 255 / 97%); box-shadow: 0 6px 20px rgb(21 54 36 / 13%); }
+  .transaction-mobile-footer > div { display: grid; gap: 4px; }
+  .transaction-mobile-footer span { color: #64766b; font-size: 10px; }
+  .transaction-mobile-footer strong { color: #173e2e; font-size: 15px; }
+  .transaction-mobile-footer .save-button { min-height: 42px; padding-inline: 13px; border-radius: 9px; font-size: 11px; }
+  .pos-mobile-history { display: grid; gap: 8px; }
+  .pos-history-card { overflow: hidden; border: 1px solid #e2e9e3; border-radius: 11px; background: #fff; }
+  .pos-history-summary { display: flex; width: 100%; min-height: 69px; align-items: center; gap: 10px; padding: 11px; border: 0; text-align: left; background: transparent; }
+  .pos-order-mark { display: grid; width: 33px; height: 33px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #236043; background: #eaf4e9; font-size: 11px; font-weight: 800; }
+  .pos-history-main { min-width: 0; flex: 1; }
+  .pos-history-main strong, .pos-history-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pos-history-main strong { color: #243b2e; font-size: 11px; }
+  .pos-history-main small { margin-top: 4px; color: #718077; font-size: 9px; }
+  .pos-history-amount { flex: 0 0 auto; color: #174934; font-size: 11px; font-weight: 800; }
+  .pos-history-details { display: grid; gap: 9px; padding: 11px; border-top: 1px solid #edf1ed; background: #fafcf9; }
+  .pos-history-details > div { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: #52645a; font-size: 10px; }
+  .pos-history-details > div strong { grid-column: 2; color: #264734; text-align: right; }
+  .pos-history-details > small { color: #718077; font-size: 9px; }
+  .pos-empty { padding: 17px; border: 1px dashed #dce5dc; border-radius: 10px; color: #64766b; background: #fff; text-align: center; font-size: 11px; }
+  .sales-history-table { display: none; }
 }
 
 /* Contrast pass: keep the same pharmacy palette while making supporting text easier to read. */
