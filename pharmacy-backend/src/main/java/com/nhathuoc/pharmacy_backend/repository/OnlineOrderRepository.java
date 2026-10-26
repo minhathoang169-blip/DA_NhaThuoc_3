@@ -23,4 +23,9 @@ public interface OnlineOrderRepository extends JpaRepository<OnlineOrder, Long> 
     Double sumRevenueBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     long countByOrderDateBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+    @Query("SELECT d.medicine.id, d.medicine.name, COALESCE(d.medicine.activeIngredient.name, ''), SUM(d.quantity), SUM(d.totalPrice) " +
+            "FROM OrderDetail d WHERE d.onlineOrder.status <> 'CANCELLED' " +
+            "GROUP BY d.medicine.id, d.medicine.name, d.medicine.activeIngredient.name ORDER BY SUM(d.quantity) DESC")
+    List<Object[]> findTopSellingMedicineTotals();
 }

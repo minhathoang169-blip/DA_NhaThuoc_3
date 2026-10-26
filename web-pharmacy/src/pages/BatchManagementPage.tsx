@@ -19,10 +19,10 @@ export const BatchManagementPage: React.FC = () => {
   // Form state nhập kho
   const [selectedMedicineId, setSelectedMedicineId] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
-  const [manufacturingDate, setManufacturingDate] = useState('2024-01-10');
-  const [expiryDate, setExpiryDate] = useState('2027-12-31');
-  const [quantity, setQuantity] = useState<number>(60);
-  const [costPrice, setCostPrice] = useState<number>(85000);
+  const [manufacturingDate, setManufacturingDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [quantity, setQuantity] = useState<number>(1);
+  const [costPrice, setCostPrice] = useState<number>(0);
   const [formError, setFormError] = useState('');
 
   // 1. Fetch danh sách Lô thuốc từ CSDL thật
@@ -64,10 +64,10 @@ export const BatchManagementPage: React.FC = () => {
   const resetForm = () => {
     setSelectedMedicineId('');
     setBatchNumber('');
-    setManufacturingDate('2024-01-10');
-    setExpiryDate('2027-12-31');
-    setQuantity(60);
-    setCostPrice(85000);
+    setManufacturingDate('');
+    setExpiryDate('');
+    setQuantity(1);
+    setCostPrice(0);
     setFormError('');
   };
 
@@ -109,7 +109,7 @@ export const BatchManagementPage: React.FC = () => {
   const expiredCount = batches.filter((b) => b.alertLevel === 'EXPIRED').length;
 
   const totalCostValue = useMemo(() => {
-    return batches.reduce((sum, b) => sum + (b.costPrice || 65000) * b.quantity, 0) || 842190000;
+    return batches.reduce((sum, b) => sum + (b.costPrice ?? 0) * b.quantity, 0);
   }, [batches]);
 
   // Bộ lọc và sắp xếp FEFO
@@ -157,27 +157,6 @@ export const BatchManagementPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => alert('Đang xuất báo cáo kiểm kê dược cận hạn chuẩn GPP định dạng PDF / Excel...')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 16px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f1f5f9',
-              color: '#334155',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <span>📥</span>
-            <span>Xuất Báo Cáo Cận Hạn</span>
-          </button>
-
           <button
             type="button"
             onClick={() => {
@@ -239,7 +218,7 @@ export const BatchManagementPage: React.FC = () => {
           </div>
 
           <div style={{ fontSize: 28, fontWeight: 900, color: '#dc2626', margin: '6px 0 4px' }}>
-            {criticalCount || 3} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
+            {criticalCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
           </div>
 
           <div style={{ fontSize: 11, color: '#991b1b', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -277,7 +256,7 @@ export const BatchManagementPage: React.FC = () => {
           </div>
 
           <div style={{ fontSize: 28, fontWeight: 900, color: '#d97706', margin: '6px 0 4px' }}>
-            {warningCount || 8} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
+            {warningCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
           </div>
 
           <div style={{ fontSize: 11, color: '#b45309', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -315,7 +294,7 @@ export const BatchManagementPage: React.FC = () => {
           </div>
 
           <div style={{ fontSize: 28, fontWeight: 900, color: '#16a34a', margin: '6px 0 4px' }}>
-            {safeCount || 124} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
+            {safeCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
           </div>
 
           <div style={{ fontSize: 11, color: '#15803d', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -353,7 +332,7 @@ export const BatchManagementPage: React.FC = () => {
           </div>
 
           <div style={{ fontSize: 28, fontWeight: 900, color: '#475569', margin: '6px 0 4px' }}>
-            {expiredCount || 1} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
+            {expiredCount} <span style={{ fontSize: 15, fontWeight: 700 }}>Lô</span>
           </div>
 
           <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -428,7 +407,7 @@ export const BatchManagementPage: React.FC = () => {
               LÔ CẦN XỬ LÝ NGAY:
             </div>
             <div style={{ fontSize: 16, fontWeight: 900, color: '#f87171' }}>
-              {criticalCount + warningCount || 12} Lô (9.1%)
+              {criticalCount + warningCount} Lô
             </div>
           </div>
         </div>
@@ -466,7 +445,7 @@ export const BatchManagementPage: React.FC = () => {
               cursor: 'pointer'
             }}
           >
-            Tất cả {batches.length || 136}
+            Tất cả {batches.length}
           </button>
 
           <button
@@ -487,7 +466,7 @@ export const BatchManagementPage: React.FC = () => {
             }}
           >
             <span>🚨</span>
-            <span>Khẩn cấp {criticalCount || 3}</span>
+            <span>Khẩn cấp {criticalCount}</span>
           </button>
 
           <button
@@ -508,7 +487,7 @@ export const BatchManagementPage: React.FC = () => {
             }}
           >
             <span>⚠️</span>
-            <span>Cảnh báo {warningCount || 8}</span>
+            <span>Cảnh báo {warningCount}</span>
           </button>
 
           <button
@@ -529,7 +508,7 @@ export const BatchManagementPage: React.FC = () => {
             }}
           >
             <span>🟢</span>
-            <span>An toàn {safeCount || 124}</span>
+            <span>An toàn {safeCount}</span>
           </button>
         </div>
 
@@ -754,7 +733,7 @@ export const BatchManagementPage: React.FC = () => {
 
                       {/* Cột 5: Giá vốn nhập */}
                       <td style={{ padding: '12px 14px', textAlign: 'right', verticalAlign: 'middle', fontWeight: 700, color: '#334155' }}>
-                        {currency.format(b.costPrice || 45000)}
+                        {currency.format(b.costPrice ?? 0)}
                       </td>
 
                       {/* Cột 6: Ngày sản xuất */}
@@ -791,7 +770,7 @@ export const BatchManagementPage: React.FC = () => {
           color: '#64748b'
         }}>
           <div>
-            Hiển thị 10 lô / trang trên tổng số <strong>{batches.length || 136}</strong> lô trong kho GPP
+            Hiển thị {filteredBatches.length} lô / trang trên tổng số <strong>{batches.length}</strong> lô trong kho
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

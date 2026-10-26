@@ -9,6 +9,7 @@ import {
   PosCheckoutResponse
 } from '../types/pharmacy';
 import { invalidateMedicinesCache, invalidateOrdersCache } from '../services/queryClient';
+import './PosPage.css';
 
 const currency = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
@@ -29,15 +30,15 @@ export const PosPage: React.FC = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'ANTIBIOTIC' | 'PAIN' | 'CARDIO'>('ALL');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const initialCartPopulatedRef = useRef<boolean>(false);
+  const customerInputRef = useRef<HTMLInputElement>(null);
+  const customerPaidInputRef = useRef<HTMLInputElement>(null);
 
   // Cart & Customer state
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [customerName, setCustomerName] = useState('Nguyễn Văn An - 0918.234.889');
-  const [customerPhone, setCustomerPhone] = useState('0918.234.889');
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QR' | 'CARD'>('CASH');
-  const [customerPaid, setCustomerPaid] = useState<number>(700000);
-  const [vipDiscountPercent, setVipDiscountPercent] = useState<number>(5); // VIP -5%
+  const [customerName, setCustomerName] = useState('Khách vãng lai');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER' | 'CARD'>('CASH');
+  const [customerPaid, setCustomerPaid] = useState<number>(0);
 
   // Modals state
   const [substituteModalMedicine, setSubstituteModalMedicine] = useState<MedicineItem | null>(null);
@@ -64,21 +65,6 @@ export const PosPage: React.FC = () => {
       return res.data;
     },
   });
-
-  // Tự động đưa 2 mặt hàng mẫu vào giỏ nếu giỏ đang trống và có data
-  useEffect(() => {
-    if (!initialCartPopulatedRef.current && medicines.length >= 2) {
-      initialCartPopulatedRef.current = true;
-      const alaxan = medicines.find((m) => m.name.toLowerCase().includes('alaxan')) || medicines[0];
-      const augmentin = medicines.find((m) => m.name.toLowerCase().includes('augmentin')) || medicines[1];
-      if (alaxan && augmentin) {
-        setCart([
-          { medicine: alaxan, quantity: 1 },
-          { medicine: augmentin, quantity: 2 },
-        ]);
-      }
-    }
-  }, [medicines]);
 
   // Lọc theo nhóm danh mục
   const filteredMedicines = useMemo(() => {
@@ -152,9 +138,7 @@ export const PosPage: React.FC = () => {
     return cart.reduce((sum, item) => sum + item.medicine.price * item.quantity, 0);
   }, [cart]);
 
-  const discountAmount = useMemo(() => {
-    return Math.round((subtotal * vipDiscountPercent) / 100);
-  }, [subtotal, vipDiscountPercent]);
+  const discountAmount = 0;
 
   const finalTotal = useMemo(() => {
     return Math.max(0, subtotal - discountAmount);
@@ -163,6 +147,11 @@ export const PosPage: React.FC = () => {
   const changeAmount = useMemo(() => {
     return Math.max(0, customerPaid - finalTotal);
   }, [customerPaid, finalTotal]);
+  const cashSuggestions = [...new Set([
+    Math.ceil(finalTotal / 10000) * 10000,
+    Math.ceil(finalTotal / 50000) * 50000,
+    Math.ceil(finalTotal / 100000) * 100000,
+  ])].filter((amount) => amount > 0);
 
   const totalQuantityUnits = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -212,7 +201,7 @@ export const PosPage: React.FC = () => {
     }
 
     const payload: PosCheckoutRequest = {
-      customerName: customerName.split('-')[0].trim() || 'Khách vãng lai',
+      customerName: customerName.trim() || 'Khách vãng lai',
       customerPhone: customerPhone.trim() || undefined,
       paymentMethod,
       discountAmount,
@@ -234,6 +223,14 @@ export const PosPage: React.FC = () => {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        customerInputRef.current?.focus();
+      }
+      if (e.key === 'F8' && paymentMethod === 'CASH') {
+        e.preventDefault();
+        customerPaidInputRef.current?.focus();
+      }
       if (e.key === 'F9') {
         e.preventDefault();
         handleCheckoutSubmit();
@@ -241,15 +238,15 @@ export const PosPage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCheckoutSubmit]);
+  }, [handleCheckoutSubmit, paymentMethod]);
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 100px)', minHeight: 650 }}>
+    <div className="pos-workspace" style={{ display: 'flex', gap: 16, height: 'calc(100vh - 100px)', minHeight: 650 }}>
       
       {/* ========================================================
           CỘT TRÁI (62%): TÌM KIẾM, DANH MỤC & BẢNG KẾT QUẢ THUỐC
           ======================================================== */}
-      <div style={{
+      <div className="pos-catalog" style={{
         flex: '1 1 62%',
         display: 'flex',
         flexDirection: 'column',
@@ -261,7 +258,7 @@ export const PosPage: React.FC = () => {
       }}>
         
         {/* Search Bar & Counter Pill */}
-        <div style={{ padding: '14px 16px 10px', background: '#ffffff', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="pos-catalog-searchbar" style={{ padding: '14px 16px 10px', background: '#ffffff', display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{
             flex: 1,
             position: 'relative',
@@ -310,12 +307,12 @@ export const PosPage: React.FC = () => {
             whiteSpace: 'nowrap',
             letterSpacing: '0.02em'
           }}>
-            {medicines.length > 0 ? `${medicines.length} THUỐC` : '1.420 THUỐC'}
+            {isLoadingMedicines ? 'Đang tải…' : `${medicines.length} THUỐC`}
           </div>
         </div>
 
         {/* Category Pills Filter */}
-        <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8, overflowX: 'auto' }}>
+        <div className="pos-category-filters" style={{ padding: '0 16px 12px', display: 'flex', gap: 8, overflowX: 'auto' }}>
           <button
             type="button"
             onClick={() => setActiveCategory('ALL')}
@@ -402,8 +399,8 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* Medicine Table */}
-        <div style={{ flex: 1, overflowY: 'auto', borderTop: '1px solid #f1f5f9' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+        <div className="pos-medicine-list" style={{ flex: 1, overflowY: 'auto', borderTop: '1px solid #f1f5f9' }}>
+          <table className="pos-medicine-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
             <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10, borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.04em' }}>
               <tr>
                 <th style={{ padding: '10px 16px' }}>MÃ • TÊN BIỆT DƯỢC / QUY CÁCH</th>
@@ -427,7 +424,7 @@ export const PosPage: React.FC = () => {
                 </tr>
               ) : (
                 filteredMedicines.map((m) => {
-                  const isRx = m.category.toLowerCase().includes('kháng sinh') || m.name.toLowerCase().includes('augmentin');
+                  const isRx = m.category.toLowerCase().includes('kháng sinh');
                   const isLowStock = m.totalStock < 20 && m.totalStock > 0;
                   const isOutOfStock = m.totalStock <= 0;
 
@@ -470,7 +467,7 @@ export const PosPage: React.FC = () => {
                           </span>
                         </div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
-                          {m.name.includes('(') ? m.name.substring(m.name.indexOf('(')) : 'Hộp tiêu chuẩn'} • {m.barcode || '8935001800050'}
+                          {m.name.includes('(') ? m.name.substring(m.name.indexOf('(')) : 'Thông tin quy cách chưa cập nhật'} • {m.barcode || 'Chưa có mã vạch'}
                         </div>
                       </td>
 
@@ -489,7 +486,7 @@ export const PosPage: React.FC = () => {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis'
                         }}>
-                          {m.activeIngredientName || 'Hoạt chất đơn'}
+                          {m.activeIngredientName || 'Chưa cập nhật hoạt chất'}
                         </div>
                         <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
                           {m.category}
@@ -526,7 +523,7 @@ export const PosPage: React.FC = () => {
                               <span>{isOutOfStock ? '0 hộp' : `${m.totalStock} hộp`}</span>
                             </div>
                             <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 1 }}>
-                              HSD: {m.nearestExpiry || '2027-10-15'}
+                              HSD: {m.nearestExpiry || 'Chưa có thông tin'}
                             </div>
                           </div>
 
@@ -582,7 +579,7 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* Footer Legend */}
-        <div style={{
+        <div className="pos-catalog-legend" style={{
           padding: '10px 16px',
           background: '#f8fafc',
           borderTop: '1px solid #e2e8f0',
@@ -616,7 +613,7 @@ export const PosPage: React.FC = () => {
       {/* ========================================================
           CỘT PHẢI (38%): HÓA ĐƠN QUẦY & THANH TOÁN
           ======================================================== */}
-      <div style={{
+      <div id="pos-cart-panel" className="pos-cart" style={{
         flex: '1 1 38%',
         display: 'flex',
         flexDirection: 'column',
@@ -649,11 +646,11 @@ export const PosPage: React.FC = () => {
                   padding: '2px 6px',
                   borderRadius: 4
                 }}>
-                  #POS-8842
+                Đơn mới
                 </span>
               </div>
               <div style={{ fontSize: 10.5, color: '#a7f3d0', marginTop: 1 }}>
-                DS: <strong>{user?.fullName || 'CKII Lê Hoàng Nam'}</strong>
+                DS: <strong>{user?.fullName || user?.username || 'Tài khoản hiện tại'}</strong>
               </div>
             </div>
           </div>
@@ -682,8 +679,8 @@ export const PosPage: React.FC = () => {
           )}
         </div>
 
-        {/* Customer Select Row */}
-        <div style={{
+        {/* Customer Information */}
+        <div className="pos-customer-row" style={{
           padding: '8px 14px',
           background: '#f8fafc',
           borderBottom: '1px solid #e2e8f0',
@@ -692,55 +689,27 @@ export const PosPage: React.FC = () => {
           alignItems: 'center',
           gap: 8
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+          <div className="pos-customer-fields" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
             <span style={{ fontSize: 13 }}>👤</span>
-            <select
+            <input
+              ref={customerInputRef}
+              aria-label="Tên khách hàng"
+              placeholder="Tên khách hàng (để trống nếu khách lẻ)"
               value={customerName}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCustomerName(val);
-                if (val.includes('0918.234.889')) {
-                  setCustomerPhone('0918.234.889');
-                  setVipDiscountPercent(5);
-                } else if (val.includes('0903.456.789')) {
-                  setCustomerPhone('0903.456.789');
-                  setVipDiscountPercent(10);
-                } else {
-                  setCustomerPhone('');
-                  setVipDiscountPercent(0);
-                }
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontSize: 12.5,
-                fontWeight: 700,
-                color: '#334155',
-                cursor: 'pointer',
-                width: '100%'
-              }}
-            >
-              <option value="Nguyễn Văn An - 0918.234.889">Nguyễn Văn An (VIP -5%)</option>
-              <option value="Trần Thị Bích - 0903.456.789">Trần Thị Bích (Kim cương -10%)</option>
-              <option value="Khách lẻ vãng lai">Khách lẻ vãng lai (0%)</option>
-            </select>
-          </div>
-          <div style={{
-            background: vipDiscountPercent > 0 ? '#e0f2fe' : '#f1f5f9',
-            color: vipDiscountPercent > 0 ? '#0369a1' : '#64748b',
-            fontSize: 11,
-            fontWeight: 800,
-            padding: '2px 8px',
-            borderRadius: 6,
-            whiteSpace: 'nowrap'
-          }}>
-            {vipDiscountPercent > 0 ? `💎 VIP -${vipDiscountPercent}%` : 'Standard'}
+              onChange={(e) => setCustomerName(e.target.value)}
+            />
+            <input
+              aria-label="Số điện thoại khách hàng"
+              placeholder="Số điện thoại"
+              inputMode="tel"
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+            />
           </div>
         </div>
 
         {/* Cart Item List */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+        <div className="pos-cart-items" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
           {cart.length === 0 ? (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', gap: 6 }} data-testid="empty-cart-message">
               <span style={{ fontSize: 36 }}>🛒</span>
@@ -830,7 +799,7 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* Calculation & Summary Panel */}
-        <div style={{
+        <div className="pos-checkout-summary" style={{
           padding: '12px 16px',
           background: '#ffffff',
           borderTop: '1px solid #e2e8f0',
@@ -842,17 +811,6 @@ export const PosPage: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b' }}>
             <span>Tổng tiền hàng ({cart.length} mặt hàng, {totalQuantityUnits} đơn vị):</span>
             <strong style={{ color: '#0f172a' }}>{currency.format(subtotal)}</strong>
-          </div>
-
-          {/* Chiết khấu VIP */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5 }}>
-            <span style={{ color: '#64748b' }}>Chiết khấu / Ưu đãi:</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 800 }}>
-                VIP -5%
-              </span>
-              <strong style={{ color: '#dc2626' }}>- {currency.format(discountAmount)}</strong>
-            </div>
           </div>
 
           {/* Big Total */}
@@ -869,9 +827,6 @@ export const PosPage: React.FC = () => {
               <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
                 KHÁCH CẦN THANH TOÁN
               </div>
-              <div style={{ fontSize: 10, color: '#0f766e', fontWeight: 600 }}>
-                Đã bao gồm VAT 5%
-              </div>
             </div>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#047857' }}>
               {currency.format(finalTotal)}
@@ -879,7 +834,7 @@ export const PosPage: React.FC = () => {
           </div>
 
           {/* 3 Payment Methods Selector */}
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="pos-payment-methods" style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
               onClick={() => setPaymentMethod('CASH')}
@@ -905,14 +860,14 @@ export const PosPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setPaymentMethod('QR')}
+              onClick={() => setPaymentMethod('TRANSFER')}
               style={{
                 flex: 1,
                 padding: '8px 4px',
                 borderRadius: 8,
-                border: paymentMethod === 'QR' ? '1.5px solid #0f766e' : '1px solid #cbd5e1',
-                background: paymentMethod === 'QR' ? '#f0fdfa' : '#ffffff',
-                color: paymentMethod === 'QR' ? '#0f766e' : '#475569',
+                border: paymentMethod === 'TRANSFER' ? '1.5px solid #0f766e' : '1px solid #cbd5e1',
+                background: paymentMethod === 'TRANSFER' ? '#f0fdfa' : '#ffffff',
+                color: paymentMethod === 'TRANSFER' ? '#0f766e' : '#475569',
                 fontSize: 11.5,
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -922,8 +877,8 @@ export const PosPage: React.FC = () => {
                 gap: 2
               }}
             >
-              <span style={{ fontSize: 14 }}>📱</span>
-              <span>VietQR Pro</span>
+              <span style={{ fontSize: 14 }}>↗</span>
+              <span>Chuyển khoản</span>
             </button>
 
             <button
@@ -957,7 +912,7 @@ export const PosPage: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b' }}>
                 <span>Gợi ý tiền đưa:</span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {[650000, 700000, 1000000].map((amt) => (
+                  {cashSuggestions.map((amt) => (
                     <button
                       key={amt}
                       type="button"
@@ -986,6 +941,7 @@ export const PosPage: React.FC = () => {
                     TIỀN KHÁCH ĐƯA (F8)
                   </label>
                   <input
+                    ref={customerPaidInputRef}
                     type="number"
                     value={customerPaid || ''}
                     onChange={(e) => setCustomerPaid(parseFloat(e.target.value) || 0)}
@@ -1027,33 +983,11 @@ export const PosPage: React.FC = () => {
             </div>
           )}
 
-          {/* Action Buttons: Lưu Tạm & Thanh Toán In Hóa Đơn */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          {/* Checkout via the current POS API */}
+          <div className="pos-checkout-actions" style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button
               type="button"
-              onClick={() => alert('Đã lưu tạm đơn hàng vào bộ nhớ quầy!')}
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: 10,
-                border: '1px solid #cbd5e1',
-                background: '#f8fafc',
-                color: '#334155',
-                fontSize: 12.5,
-                fontWeight: 800,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
-            >
-              <span>💾</span>
-              <span>Lưu Tạm</span>
-            </button>
-
-            <button
-              type="button"
+              className="pos-checkout-button"
               disabled={cart.length === 0 || checkoutMutation.isPending}
               onClick={handleCheckoutSubmit}
               style={{
@@ -1081,7 +1015,7 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* Bottom Key Shortcuts Status Bar */}
-        <div style={{
+        <div className="pos-keyboard-shortcuts" style={{
           padding: '8px 14px',
           background: '#f1f5f9',
           borderTop: '1px solid #e2e8f0',
@@ -1093,17 +1027,23 @@ export const PosPage: React.FC = () => {
           fontWeight: 700
         }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <span><strong style={{ color: '#0f172a' }}>F2</strong> Quét Barcode</span>
+            <span><strong style={{ color: '#0f172a' }}>F2</strong> Quét mã / tìm thuốc</span>
             <span><strong style={{ color: '#0f172a' }}>F4</strong> Khách Hàng</span>
             <span><strong style={{ color: '#0f172a' }}>F8</strong> Tiền Khách Đưa</span>
             <span><strong style={{ color: '#0f172a' }}>F9</strong> Hoàn Tất</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#059669' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-            <span>GPP Terminal Online</span>
-          </div>
+          <span>Thanh toán qua API bán hàng</span>
         </div>
       </div>
+
+      {cart.length > 0 && !completedInvoice && <button
+        className="pos-mobile-cart-trigger"
+        type="button"
+        onClick={() => document.getElementById('pos-cart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      >
+        <span>{totalQuantityUnits} món · {currency.format(finalTotal)}</span>
+        <strong>Xem giỏ hàng <span aria-hidden="true">↓</span></strong>
+      </button>}
 
       {/* ========================================================
           MODAL: GỢI Ý THUỐC CÙNG HOẠT CHẤT

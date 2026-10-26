@@ -21,4 +21,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     long countBySaleDateBetween(LocalDateTime startDate, LocalDateTime endDate);
 
     List<Invoice> findBySaleDateBetweenOrderBySaleDateAsc(LocalDateTime startDate, LocalDateTime endDate);
+
+    @Query("SELECT d.medicine.id, d.medicine.name, COALESCE(d.medicine.activeIngredient.name, ''), SUM(d.quantity), SUM(d.totalPrice) " +
+            "FROM InvoiceDetail d GROUP BY d.medicine.id, d.medicine.name, d.medicine.activeIngredient.name ORDER BY SUM(d.quantity) DESC")
+    List<Object[]> findTopSellingMedicineTotals();
 }

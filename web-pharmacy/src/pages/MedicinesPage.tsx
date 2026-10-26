@@ -638,7 +638,7 @@ export const MedicinesPage: React.FC = () => {
                         </div>
                         <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>|||</span>
-                          <span>{m.barcode || '8935001800050'}</span>
+                          <span>{m.barcode || 'Chưa có mã vạch'}</span>
                         </div>
                         <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
                           SĐK: VD-{m.barcode ? m.barcode.slice(-5) : '24890'}-16
@@ -686,7 +686,7 @@ export const MedicinesPage: React.FC = () => {
                           display: 'inline-block',
                           maxWidth: 220
                         }}>
-                          {m.activeIngredientName || 'Hoạt chất đơn'}
+                          {m.activeIngredientName || 'Chưa cập nhật hoạt chất'}
                         </div>
                         <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>
                           {isRx ? 'Tác dụng kháng khuẩn / ức chế enzym' : 'Tác dụng giảm triệu chứng toàn thân'}

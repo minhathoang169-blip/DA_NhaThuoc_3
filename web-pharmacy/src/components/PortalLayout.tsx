@@ -1,18 +1,14 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
-
-const currency = new Intl.NumberFormat('vi-VN', {
-  style: 'currency',
-  currency: 'VND',
-  maximumFractionDigits: 0,
-});
+import { OnlineOrder } from '../types/pharmacy';
 
 export const PortalLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -21,38 +17,38 @@ export const PortalLayout: React.FC = () => {
 
   const isAdmin = user?.role === 'ADMIN';
 
-  // Lấy doanh thu ca làm việc và số lượng đơn từ DB
-  const { data: overview } = useQuery({
-    queryKey: ['portalLayoutOverview'],
+  const { data: mobileOrders } = useQuery<OnlineOrder[]>({
+    queryKey: ['adminMobileOrdersList'],
     queryFn: async () => {
       try {
-        const res = await api.get('/v1/dashboard/overview');
+        const res = await api.get('/v1/admin/orders');
         return res.data;
       } catch {
-        return null;
+        const res = await api.get('/v1/orders');
+        return res.data;
       }
     },
-    refetchInterval: 15000,
+    enabled: Boolean(user && ['ADMIN', 'PHARMACIST'].includes(user.role)),
+    refetchInterval: 5000,
   });
 
-  const shiftRevenue = overview?.shiftRevenue || 18450000;
-  const pendingOrdersCount = overview?.appOrdersCount || 8;
+  const pendingOrdersCount = mobileOrders?.filter((order) => order.status === 'PENDING').length;
 
   const navItems = [
-    { to: '/pos', label: 'Bán Hàng Quầy (POS)', icon: '🛒', badge: 'F1', badgeType: 'key' },
+    { to: '/pos', label: 'Bán Hàng Quầy (POS)', icon: '🛒' },
     { to: '/medicines', label: 'Danh Mục & Hoạt Chất', icon: '💊' },
     { to: '/inventory', label: 'Quản Lý Lô & Cận Hạn', icon: '📦', badge: 'FEFO', badgeType: 'amber' },
-    { to: '/orders', label: 'Đơn Hàng Mobile App', icon: '📱', badge: String(pendingOrdersCount).padStart(2, '0'), badgeType: 'red' },
+    { to: '/orders', label: 'Đơn Hàng Mobile App', icon: '📱', badge: pendingOrdersCount === undefined ? undefined : String(pendingOrdersCount).padStart(2, '0'), badgeType: 'red' },
     { to: '/dashboard', label: 'Báo Cáo & Thống Kê', icon: '📊' },
   ];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+    <div className="portal-shell" style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       
       {/* ========================================================
           SIDEBAR CHÍNH: DEEP FOREST PINE GREEN (#062d27)
           ======================================================== */}
-      <aside style={{
+      <aside className="portal-sidebar" style={{
         width: 260,
         background: '#062d27',
         color: '#e2e8f0',
@@ -138,7 +134,7 @@ export const PortalLayout: React.FC = () => {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
               }}>
-                {user?.fullName || 'DS. CKII Lê Hoàng Nam'}
+                {user?.fullName || user?.username || 'Tài khoản'}
               </span>
               <span style={{
                 background: isAdmin ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
@@ -149,12 +145,12 @@ export const PortalLayout: React.FC = () => {
                 borderRadius: 4,
                 border: isAdmin ? '1px solid rgba(110, 231, 183, 0.4)' : '1px solid rgba(125, 211, 252, 0.4)'
               }}>
-                {user?.role || 'ADMIN'}
+                {user?.role || 'USER'}
               </span>
             </div>
             <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
-              <span>Đang trực quầy chính</span>
+              <span>Đang đăng nhập</span>
             </div>
           </div>
         </div>
@@ -165,7 +161,7 @@ export const PortalLayout: React.FC = () => {
         </div>
 
         {/* Menu Navigation Items */}
-        <nav style={{ flex: 1, padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <nav className="portal-nav" style={{ flex: 1, padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -208,29 +204,6 @@ export const PortalLayout: React.FC = () => {
           ))}
         </nav>
 
-        {/* Ca Làm Việc & Doanh Thu Ca Box */}
-        <div style={{
-          margin: '12px',
-          padding: '12px 14px',
-          background: '#0a3d34',
-          borderRadius: 12,
-          border: '1px solid #115e52',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#99f6e4', fontWeight: 700 }}>
-            <span>CA LÀM VIỆC #2</span>
-            <span style={{ color: '#ffffff' }}>14:00 - 22:00</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 }}>
-            <span style={{ fontSize: 11, color: '#cbd5e1' }}>Doanh thu ca:</span>
-            <strong style={{ fontSize: 14, color: '#34d399', fontWeight: 900 }}>
-              {currency.format(shiftRevenue)}
-            </strong>
-          </div>
-        </div>
-
         {/* Đăng Xuất Button */}
         <div style={{ padding: '12px 14px 18px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <button
@@ -272,10 +245,10 @@ export const PortalLayout: React.FC = () => {
       {/* ========================================================
           VÙNG NỘI DUNG CHÍNH (HEADER + MAIN CONTENT)
           ======================================================== */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto' }}>
+      <div className="portal-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto' }}>
         
         {/* Top Header Bar */}
-        <header style={{
+        <header className="portal-header" style={{
           height: 60,
           background: '#ffffff',
           borderBottom: '1px solid #e2e8f0',
@@ -296,7 +269,7 @@ export const PortalLayout: React.FC = () => {
           </div>
 
           {/* Status Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="portal-header-tools" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {/* Database pill */}
             <div style={{
               display: 'flex',
@@ -310,13 +283,13 @@ export const PortalLayout: React.FC = () => {
               border: '1px solid #a5f3fc',
               fontWeight: 700
             }}>
-              <span>SQL Server:</span>
+              <span>Phiên:</span>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-              <strong style={{ color: '#0891b2' }}>QuanLyNhaThuocDB (Đã kết nối)</strong>
+              <strong style={{ color: '#0891b2' }}>Đã đăng nhập</strong>
             </div>
 
             {/* Phím tắt pill */}
-            <div style={{
+            {location.pathname === '/pos' && <div className="portal-shortcuts" style={{
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -332,21 +305,7 @@ export const PortalLayout: React.FC = () => {
               <span><code style={{ background: '#fff', padding: '1px 4px', borderRadius: 4, border: '1px solid #cbd5e1' }}>F2</code> Quét mã</span>
               <span><code style={{ background: '#fff', padding: '1px 4px', borderRadius: 4, border: '1px solid #cbd5e1' }}>F3</code> Tìm thuốc</span>
               <span><code style={{ background: '#fff', padding: '1px 4px', borderRadius: 4, border: '1px solid #cbd5e1' }}>F9</code> Thanh toán</span>
-            </div>
-
-            {/* Notification Bell */}
-            <div style={{ position: 'relative', cursor: 'pointer', padding: 6, borderRadius: '50%', background: '#f8fafc' }}>
-              <span style={{ fontSize: 16 }}>🔔</span>
-              <span style={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: '#ef4444'
-              }} />
-            </div>
+            </div>}
 
             {/* Pharmacist Profile */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 8, borderLeft: '1px solid #e2e8f0' }}>
@@ -362,20 +321,20 @@ export const PortalLayout: React.FC = () => {
                 color: '#fff',
                 fontWeight: 800
               }}>
-                HN
+                {(user?.fullName || user?.username || 'AT').slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-                  Hoàng Nam
+                  {user?.fullName || user?.username || 'Tài khoản'}
                 </div>
-                <div style={{ fontSize: 11, color: '#64748b' }}>Quầy Dược Số 01</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{user?.role || 'Tài khoản'}</div>
               </div>
             </div>
           </div>
         </header>
 
         {/* Content Outlet */}
-        <main style={{ flex: 1, padding: '20px 24px', background: '#f8fafc' }}>
+        <main className="portal-content" style={{ flex: 1, padding: '20px 24px', background: '#f8fafc' }}>
           <Outlet />
         </main>
       </div>

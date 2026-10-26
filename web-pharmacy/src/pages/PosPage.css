@@ -1,0 +1,110 @@
+.portal-shell { box-sizing: border-box; }
+.portal-sidebar, .portal-main, .portal-content { min-width: 0; }
+.portal-header-tools { min-width: 0; }
+.pos-workspace {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, .9fr);
+  gap: 14px !important;
+  height: calc(100dvh - 104px) !important;
+  min-height: 620px !important;
+}
+.pos-catalog, .pos-cart { min-width: 0; border-radius: 14px !important; }
+.pos-cart { position: relative; }
+.pos-mobile-cart-trigger { display: none; }
+
+@media (max-width: 1100px) {
+  .portal-sidebar { width: 224px !important; }
+  .portal-header { padding-inline: 14px !important; }
+  .portal-header-tools { gap: 7px !important; }
+  .portal-shortcuts { display: none !important; }
+  .portal-content { padding: 14px !important; }
+  .pos-workspace {
+    grid-template-columns: minmax(0, 1.1fr) minmax(330px, .9fr);
+    height: calc(100dvh - 86px) !important;
+    min-height: 580px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal-shell { display: flex !important; flex-direction: column !important; min-height: 100dvh !important; }
+  .portal-sidebar { position: sticky; top: 0; z-index: 40; display: flex !important; width: 100% !important; height: auto !important; flex-direction: column !important; padding: 0 0 7px; border-right: 0 !important; box-shadow: 0 5px 18px rgb(5 43 34 / 10%); }
+  .portal-sidebar > div:first-child { padding: 9px 13px !important; }
+  .portal-sidebar > div:nth-child(2), .portal-sidebar > div:nth-child(3) { display: none !important; }
+  .portal-nav { display: flex !important; width: 100%; flex: none !important; gap: 5px !important; overflow-x: auto; padding: 0 10px 3px !important; scrollbar-width: none; }
+  .portal-nav::-webkit-scrollbar { display: none; }
+  .portal-nav a { flex: 0 0 auto; min-height: 38px; padding: 8px 10px !important; border-radius: 8px !important; font-size: 11px !important; white-space: nowrap; }
+  .portal-sidebar > div:last-child { padding: 5px 12px 0 !important; border-top: 0 !important; }
+  .portal-sidebar > div:last-child button { width: auto !important; min-height: 32px; margin-left: auto; padding: 6px 10px !important; font-size: 10px !important; }
+  .portal-main { height: auto !important; min-height: calc(100dvh - 100px); overflow: visible !important; }
+  .portal-header { position: sticky !important; top: 0; z-index: 30; display: flex; min-height: 48px; height: auto !important; gap: 7px; padding: 7px 12px !important; }
+  .portal-header > div:first-child { font-size: 10px !important; }
+  .portal-header-tools { justify-content: flex-end; flex: 1; gap: 6px !important; }
+  .portal-header-tools > div:first-child { padding: 4px 8px !important; font-size: 9px !important; }
+  .portal-header-tools > div:last-child { gap: 6px !important; padding-left: 6px !important; }
+  .portal-header-tools > div:last-child > div:first-child { width: 29px !important; height: 29px !important; font-size: 11px !important; }
+  .portal-header-tools > div:last-child > div:last-child { display: none; }
+  .portal-content { padding: 12px 11px 98px !important; }
+  .pos-workspace { display: flex !important; height: auto !important; min-height: 0 !important; flex-direction: column !important; gap: 12px !important; }
+  .pos-catalog, .pos-cart { width: 100% !important; flex: none !important; overflow: visible !important; border-radius: 12px !important; }
+  .pos-catalog-searchbar { gap: 7px !important; padding: 10px !important; }
+  .pos-catalog-searchbar > div:first-child { min-width: 0; padding-inline: 9px !important; }
+  .pos-catalog-searchbar input { min-width: 0; font-size: 12px !important; }
+  .pos-catalog-searchbar > div:last-child { padding: 8px !important; font-size: 9px !important; }
+  .pos-category-filters { gap: 6px !important; padding: 0 10px 10px !important; }
+  .pos-category-filters button { flex: 0 0 auto; padding: 7px 10px !important; font-size: 10px !important; white-space: nowrap; }
+  .pos-medicine-list { flex: none !important; overflow: visible !important; }
+  .pos-medicine-table { table-layout: fixed; font-size: 11px !important; }
+  .pos-medicine-table th { padding: 9px 6px !important; font-size: 8px !important; letter-spacing: 0 !important; }
+  .pos-medicine-table th:nth-child(1) { width: 49%; }
+  .pos-medicine-table th:nth-child(2) { display: none; }
+  .pos-medicine-table th:nth-child(3) { width: 19%; }
+  .pos-medicine-table th:nth-child(4) { width: 32%; }
+  .pos-medicine-table td { padding: 9px 6px !important; vertical-align: top; }
+  .pos-medicine-table td:nth-child(2) { display: none; }
+  .pos-medicine-table td:first-child > div:first-child { flex-wrap: wrap; align-items: flex-start !important; gap: 4px !important; }
+  .pos-medicine-table td:first-child > div:first-child > span:nth-child(2) { max-width: 100%; font-size: 11px !important; white-space: normal; overflow-wrap: anywhere; }
+  .pos-medicine-table td:first-child > div:first-child > span:first-child { font-size: 8px !important; }
+  .pos-medicine-table td:first-child > div:first-child > span:last-child { font-size: 8px !important; }
+  .pos-medicine-table td:first-child > div:nth-child(2) { font-size: 8px !important; line-height: 1.4; overflow-wrap: anywhere; }
+  .pos-medicine-table td:nth-child(3) { font-size: 10px !important; }
+  .pos-medicine-table td:nth-child(4) > div { align-items: flex-end !important; flex-direction: column; gap: 6px !important; }
+  .pos-medicine-table td:nth-child(4) > div > div { text-align: right; }
+  .pos-medicine-table td:nth-child(4) button { justify-content: center; width: 100%; min-height: 34px; padding: 6px !important; font-size: 10px !important; }
+  .pos-catalog-legend { display: none !important; }
+  .pos-cart { scroll-margin-top: 145px; }
+  .pos-cart > div:first-child { padding: 11px 12px !important; }
+  .pos-cart > div:first-child > div { min-width: 0; }
+  .pos-cart > div:first-child span { font-size: 12px !important; }
+  .pos-cart > div:first-child span span { font-size: 8px !important; }
+  .pos-customer-row { align-items: stretch !important; flex-direction: column; padding: 10px !important; }
+  .pos-customer-fields { display: grid !important; grid-template-columns: 1fr; gap: 7px !important; }
+  .pos-customer-fields > span { display: none; }
+  .pos-customer-fields input { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #d7e0e3; border-radius: 8px; outline-color: #0f766e; font: 12px Inter, system-ui, sans-serif; }
+  .pos-cart-items { flex: none !important; max-height: 38vh; overflow-y: auto !important; padding: 10px !important; }
+  .pos-checkout-summary { gap: 8px !important; padding: 10px !important; }
+  .pos-checkout-summary > div:first-child,
+  .pos-checkout-summary > div:nth-child(2) { font-size: 11px !important; }
+  .pos-checkout-summary > div:nth-child(2) { display: none !important; }
+  .pos-checkout-summary > div:nth-child(3) { padding: 9px !important; }
+  .pos-checkout-summary > div:nth-child(3) > div:first-child > div:first-child { font-size: 9px !important; }
+  .pos-checkout-summary > div:nth-child(3) > div:first-child > div:nth-child(2) { display: none; }
+  .pos-checkout-summary > div:nth-child(3) > div:last-child { font-size: 17px !important; }
+  .pos-payment-methods button { min-height: 52px; font-size: 10px !important; }
+  .pos-payment-methods button > span:first-child { font-size: 12px !important; }
+  .pos-checkout-summary input { min-height: 40px; font-size: 13px !important; }
+  .pos-checkout-summary > div:nth-last-child(2) { flex-direction: column !important; }
+  .pos-checkout-actions { position: sticky; z-index: 15; bottom: 8px; }
+  .pos-checkout-button { width: 100%; min-height: 48px; flex: 1 !important; padding: 11px !important; border-radius: 10px !important; font-size: 11px !important; }
+  .pos-keyboard-shortcuts { display: none !important; }
+  .pos-mobile-cart-trigger { position: fixed; z-index: 60; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); left: 12px; display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; border: 1px solid #cce3d4; border-radius: 13px; color: #204532; background: rgb(255 255 255 / 97%); box-shadow: 0 8px 28px rgb(10 54 34 / 18%); font: 600 11px Inter, system-ui, sans-serif; }
+  .pos-mobile-cart-trigger strong { display: flex; align-items: center; gap: 8px; color: #fff; padding: 9px 12px; border-radius: 8px; background: #06463a; font-size: 10px; }
+}
+
+@media (max-width: 390px) {
+  .portal-header > div:first-child { display: none; }
+  .pos-medicine-table th:nth-child(1) { width: 47%; }
+  .pos-medicine-table th:nth-child(3) { width: 20%; }
+  .pos-medicine-table th:nth-child(4) { width: 33%; }
+  .pos-medicine-table td:nth-child(3) { font-size: 9px !important; }
+  .pos-checkout-summary > div:first-child { font-size: 10px !important; }
+}

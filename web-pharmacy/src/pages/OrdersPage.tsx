@@ -70,14 +70,14 @@ export const OrdersPage: React.FC = () => {
   });
 
   // 4. Thống kê số lượng theo trạng thái
-  const pendingCount = orders.filter((o) => o.status === 'PENDING').length || 4;
-  const confirmedCount = orders.filter((o) => o.status === 'CONFIRMED').length || 5;
-  const packedCount = orders.filter((o) => o.status === 'PACKED').length || 3;
-  const shippingCount = orders.filter((o) => o.status === 'SHIPPING').length || 4;
-  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length || 2;
+  const pendingCount = orders.filter((o) => o.status === 'PENDING').length;
+  const confirmedCount = orders.filter((o) => o.status === 'CONFIRMED').length;
+  const packedCount = orders.filter((o) => o.status === 'PACKED').length;
+  const shippingCount = orders.filter((o) => o.status === 'SHIPPING').length;
+  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length;
 
   const totalAppSales = useMemo(() => {
-    return orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) || 9860000;
+    return orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   }, [orders]);
 
   // Bộ lọc danh sách
@@ -336,7 +336,7 @@ export const OrdersPage: React.FC = () => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {[
-            { id: 'all', label: `Tất cả (${orders.length || 18})` },
+            { id: 'all', label: `Tất cả (${orders.length})` },
             { id: 'PENDING', label: `Chờ xác nhận ${pendingCount}` },
             { id: 'CONFIRMED', label: `Đã duyệt ${confirmedCount}` },
             { id: 'PACKED', label: `Đã xuất kho ${packedCount}` },

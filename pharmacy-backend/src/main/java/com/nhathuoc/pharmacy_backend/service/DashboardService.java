@@ -51,8 +51,8 @@ public class DashboardService {
 
         double totalRevenue = posRevenue + appRevenue;
 
-        double posPct = totalRevenue > 0 ? Math.round((posRevenue / totalRevenue) * 1000.0) / 10.0 : 73.8;
-        double appPct = totalRevenue > 0 ? Math.round((appRevenue / totalRevenue) * 1000.0) / 10.0 : 26.2;
+        double posPct = totalRevenue > 0 ? Math.round((posRevenue / totalRevenue) * 1000.0) / 10.0 : 0.0;
+        double appPct = totalRevenue > 0 ? Math.round((appRevenue / totalRevenue) * 1000.0) / 10.0 : 0.0;
 
         long posOrdersCount = invoiceRepository.count();
         long appOrdersCount = onlineOrderRepository.count();
@@ -61,14 +61,10 @@ public class DashboardService {
         LocalDateTime startOfToday = today.atStartOfDay();
         LocalDateTime endOfToday = today.atTime(LocalTime.MAX);
         Double shiftRev = invoiceRepository.sumRevenueBetween(startOfToday, endOfToday);
-        if (shiftRev == null || shiftRev == 0) {
-            shiftRev = posRevenue > 0 ? posRevenue : 18450000.0;
-        }
+        if (shiftRev == null) shiftRev = 0.0;
 
         Double todayAppRev = onlineOrderRepository.sumRevenueBetween(startOfToday, endOfToday);
-        if (todayAppRev == null || todayAppRev == 0) {
-            todayAppRev = appRevenue > 0 ? appRevenue : 9860000.0;
-        }
+        if (todayAppRev == null) todayAppRev = 0.0;
 
         // Đếm thuốc sắp hết hàng (< 20)
         List<Medicine> medicines = medicineRepository.findAll();
@@ -98,12 +94,6 @@ public class DashboardService {
             long posCount = invoiceRepository.countBySaleDateBetween(start, end);
             long appCount = onlineOrderRepository.countByOrderDateBetween(start, end);
 
-            // Dự phòng nếu chưa có giao dịch trong ngày đó
-            if (dayTotal == 0) {
-                dayTotal = 2500000.0 + (i * 350000.0);
-                posCount = 12 + i;
-            }
-
             chart.add(new DashboardMetricsResponse.DailyRevenueDto(
                     date.toString(),
                     dayTotal,
@@ -111,53 +101,61 @@ public class DashboardService {
             ));
         }
 
-        // Top 5 mặt hàng bán chạy nhất
+        Map<String, Object[]> salesByMedicine = new HashMap<>();
+        addSalesTotals(salesByMedicine, invoiceRepository.findTopSellingMedicineTotals());
+        addSalesTotals(salesByMedicine, onlineOrderRepository.findTopSellingMedicineTotals());
+
+        List<Object[]> rankedSales = salesByMedicine.values().stream()
+                .sorted(Comparator.comparingLong((Object[] row) -> ((Number) row[3]).longValue()).reversed())
+                .limit(5)
+                .toList();
         List<DashboardOverviewResponse.TopSellingMedicineDto> topSelling = new ArrayList<>();
-        List<Medicine> allMeds = medicineRepository.findAllByOrderByNameAsc();
-        int rank = 1;
-        for (Medicine m : allMeds) {
-            if (rank > 5) break;
-            int stock = batchRepository.getAvailableStockForMedicine(m.getId(), today);
+        for (int index = 0; index < rankedSales.size(); index++) {
+            Object[] row = rankedSales.get(index);
+            String medicineId = (String) row[0];
+            String medicineName = (String) row[1];
+            int quantitySold = ((Number) row[3]).intValue();
+            double revenue = ((Number) row[4]).doubleValue();
+            int stock = batchRepository.getAvailableStockForMedicine(medicineId, today);
             String status = stock >= 20 ? "SAFE" : (stock >= 10 ? "WARNING" : "CRITICAL");
-            int soldQty = 50 + (6 - rank) * 60;
-            double rev = soldQty * m.getPrice();
-            double pct = totalRevenue > 0 ? Math.round((rev / totalRevenue) * 1000.0) / 10.0 : 15.0;
-
-            String activeIngredientName = m.getActiveIngredient() != null ? m.getActiveIngredient().getName() : "Hoạt chất chuẩn";
-            String unit = m.getName().contains("Lọ") ? "Lọ" : (m.getName().contains("Tuýp") ? "Tuýp" : (m.getName().contains("vỉ") ? "Vỉ" : "Hộp"));
-
+            String unit = medicineName.contains("Lọ") ? "Lọ" : (medicineName.contains("Tuýp") ? "Tuýp" : (medicineName.contains("vỉ") ? "Vỉ" : "Hộp"));
+            double percentage = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 1000.0) / 10.0 : 0.0;
             topSelling.add(new DashboardOverviewResponse.TopSellingMedicineDto(
-                    rank,
-                    m.getId(),
-                    m.getName(),
-                    activeIngredientName,
-                    soldQty,
-                    unit,
-                    rev,
-                    pct,
-                    stock,
-                    status
+                    index + 1, medicineId, medicineName, (String) row[2], quantitySold,
+                    unit, revenue, percentage, stock, status
             ));
-            rank++;
         }
 
         return new DashboardOverviewResponse(
-                posRevenue > 0 ? posRevenue : 21118600.0,
-                appRevenue > 0 ? appRevenue : 7471400.0,
-                totalRevenue > 0 ? totalRevenue : 28590000.0,
+                posRevenue,
+                appRevenue,
+                totalRevenue,
                 posPct,
                 appPct,
-                posOrdersCount > 0 ? posOrdersCount : 118,
-                appOrdersCount > 0 ? appOrdersCount : 24,
-                totalOrdersCount > 0 ? totalOrdersCount : 142,
-                lowStockCount > 0 ? lowStockCount : 4,
-                expiringBatchesCount > 0 ? expiringBatchesCount : 2,
-                criticalBatchesCount > 0 ? criticalBatchesCount : 1,
+                posOrdersCount,
+                appOrdersCount,
+                totalOrdersCount,
+                lowStockCount,
+                expiringBatchesCount,
+                criticalBatchesCount,
                 shiftRev,
                 todayAppRev,
                 chart,
                 topSelling
         );
+    }
+
+    private void addSalesTotals(Map<String, Object[]> totals, List<Object[]> rows) {
+        for (Object[] row : rows) {
+            String medicineId = (String) row[0];
+            Object[] current = totals.get(medicineId);
+            if (current == null) {
+                totals.put(medicineId, new Object[]{row[0], row[1], row[2], ((Number) row[3]).longValue(), ((Number) row[4]).doubleValue()});
+            } else {
+                current[3] = ((Number) current[3]).longValue() + ((Number) row[3]).longValue();
+                current[4] = ((Number) current[4]).doubleValue() + ((Number) row[4]).doubleValue();
+            }
+        }
     }
 
     @Transactional(readOnly = true)
