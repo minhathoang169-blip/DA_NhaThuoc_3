@@ -17,6 +17,12 @@ const dateFormat = new Intl.DateTimeFormat('vi-VN', {
   month: '2-digit',
   year: 'numeric',
 })
+const todayLabel = new Intl.DateTimeFormat('vi-VN', {
+  weekday: 'long',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+}).format(new Date()).toLocaleUpperCase('vi')
 
 function localDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -134,7 +140,7 @@ function App() {
       <aside className="sidebar">
         <a className="brand" href="#top" aria-label="Nhà thuốc An Tâm, tổng quan">
           <span className="brand-mark"><Icon name="medicines" size={22} /></span>
-          <span>An Tâm<small>CHĂM SÓC SỨC KHỎE</small></span>
+          <span>NHÀ THUỐC AN TÂM<small>HỆ THỐNG QUẢN LÝ NHÀ THUỐC</small></span>
         </a>
         <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
         <nav className="main-nav" aria-label="Điều hướng chính">
@@ -152,12 +158,13 @@ function App() {
 
       <main className="workspace">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-brand">AN TÂM</span><span className="breadcrumb-divider">/</span> {navigation.find(({ key }) => key === activeView)?.label}</div>
+          <div className="breadcrumb"><span>Hệ thống nhà thuốc</span><span className="breadcrumb-divider">/</span> <strong>{navigation.find(({ key }) => key === activeView)?.label}</strong></div>
           <div className="topbar-tools">
             <div className={`connection ${connection}`}>
               <span className="connection-dot" />
-              {connection === 'connected' ? 'Đã kết nối dữ liệu' : connection === 'error' ? 'Mất kết nối API' : 'Đang kết nối'}
+              <span>{connection === 'connected' ? 'Dữ liệu đã đồng bộ' : connection === 'error' ? 'Mất kết nối máy chủ' : 'Đang kết nối máy chủ'}</span>
             </div>
+            {auth && <div className="account-chip"><span className="account-avatar">{auth.username.slice(0, 2).toLocaleUpperCase('vi')}</span><span><strong>{auth.username}</strong><small>Tài khoản đang hoạt động</small></span></div>}
             {auth && <button className="logout-button" type="button" onClick={() => { setAuth(null); setLogin({ username: auth.username, password: '' }); setActiveView('overview') }}>Đăng xuất</button>}
           </div>
         </header>
@@ -184,9 +191,9 @@ function App() {
         {activeView === 'overview' && <section className="page-content" id="overview">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">THỨC HAI · NHÀ THUỐC AN TÂM</p>
-              <h1>Chào buổi sáng 👋</h1>
-              <p className="heading-note">Đây là tình hình kho và hoạt động của nhà thuốc hôm nay.</p>
+              <p className="eyebrow">{todayLabel}</p>
+              <h1>Điều hành nhà thuốc</h1>
+              <p className="heading-note">Theo dõi danh mục, tồn kho và các lô thuốc cần xử lý.</p>
             </div>
             <div className="heading-actions">
               <button className="refresh-button" type="button" onClick={() => { setConnection('loading'); loadMedicines() }} disabled={connection === 'loading'}>
