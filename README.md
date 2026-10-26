@@ -76,7 +76,7 @@ Mở terminal tại thư mục `pharmacy-backend`:
 ```powershell
 # Thiết lập biến môi trường kết nối SQL Server (nếu cần)
 $env:DB_HOST = "localhost"
-$env:DB_PORT = "59177"
+$env:DB_PORT = "1433"
 $env:DB_NAME = "QuanLyNhaThuocDB"
 
 # Khởi chạy ứng dụng Spring Boot với profile SQL Server

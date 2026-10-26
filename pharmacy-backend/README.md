@@ -32,7 +32,7 @@ Lần đầu gọi wrapper có thể tải Maven từ kho Maven Central và ghi 
 
 `src/main/resources/application.properties` đặt profile mặc định là `sqlserver` và `spring.sql.init.mode=never`. Ứng dụng không tự chạy script SQL và không tự tạo tài khoản, thuốc, lô thuốc hay đơn hàng mẫu. Database phải được quản trị viên cấu hình và cấp dữ liệu thật.
 
-Profile `sqlserver` kết nối tới `127.0.0.1:59177`, database `QuanLyNhaThuocDB` theo mặc định; có thể đổi bằng `DB_HOST`, `DB_PORT`, `DB_NAME`. Xác thực dùng Windows Integrated Security của tài khoản chạy Backend. `spring.jpa.hibernate.ddl-auto=update`; khi kết nối được database, Hibernate có thể cập nhật cấu trúc bảng. Mỗi máy cần cấu hình SQL Server và quyền truy cập riêng.
+Profile `sqlserver` kết nối tới `127.0.0.1:1433`, database `QuanLyNhaThuocDB` theo mặc định; có thể đổi bằng `DB_HOST`, `DB_PORT`, `DB_NAME`. Xác thực dùng Windows Integrated Security của tài khoản chạy Backend. `spring.jpa.hibernate.ddl-auto=update`; khi kết nối được database, Hibernate có thể cập nhật cấu trúc bảng. Mỗi máy cần cấu hình SQL Server và quyền truy cập riêng.
 
 Hai script cấu trúc là `src/main/resources/schema.sql` và `src/main/resources/schema_extensions.sql`. Chúng chỉ tạo/cập nhật schema, không thêm dữ liệu. `schema.sql` có `CREATE DATABASE` và không an toàn để chạy lại; `schema_extensions.sql` yêu cầu schema cơ sở đã tồn tại và có các lệnh `ALTER TABLE`. Chỉ quản trị viên database mới nên chạy script phù hợp với trạng thái thực tế của database. Các script không được Spring tự động thực thi.
 
@@ -40,8 +40,8 @@ Nếu đã xác nhận cần tạo database/schema mới, quản trị viên có
 
 ```powershell
 Set-Location 'F:\DA_NhaThuoc_3\pharmacy-backend'
-sqlcmd -S localhost,59177 -E -b -i .\src\main\resources\schema.sql
-sqlcmd -S localhost,59177 -E -b -i .\src\main\resources\schema_extensions.sql
+sqlcmd -S localhost,1433 -E -b -i .\src\main\resources\schema.sql
+sqlcmd -S localhost,1433 -E -b -i .\src\main\resources\schema_extensions.sql
 ```
 
 Các lệnh trên **ghi thay đổi vào SQL Server** và tạo/cập nhật schema. Không chạy lại trên database đã có hoặc chưa kiểm tra cấu trúc. `-b` yêu cầu SQLCMD báo lỗi qua exit code khi statement lỗi; exit code 0 không thay thế việc xác minh schema sau chạy. Script không chèn người dùng mặc định; quản trị viên phải thiết lập tài khoản theo quy trình triển khai riêng.
@@ -52,7 +52,7 @@ Mở PowerShell tại thư mục Backend, thiết lập Java như trên, sau đ�
 
 ```powershell
 $env:DB_HOST = 'localhost'
-$env:DB_PORT = '59177'
+$env:DB_PORT = '1433'
 $env:DB_NAME = 'QuanLyNhaThuocDB'
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=sqlserver"
 ```
